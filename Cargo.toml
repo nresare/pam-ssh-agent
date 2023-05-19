@@ -1,0 +1,16 @@
+[package]
+name = "pam-ssh-agent"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/nresare/pam-ssh-agent"
+description = """
+A PAM module that authenticates using the ssh-agent.
+"""
+
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ssh-agent-client-rs = "0.3.0"
+getrandom = "0.2.9"
