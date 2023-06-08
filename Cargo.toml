@@ -14,3 +14,6 @@ A PAM module that authenticates using the ssh-agent.
 [dependencies]
 ssh-agent-client-rs = "0.3.0"
 getrandom = "0.2.9"
+bytes = "1.4.0"
+ssh-key = { version = "0.5.1" }
+ssh-encoding = "0.1.0"
