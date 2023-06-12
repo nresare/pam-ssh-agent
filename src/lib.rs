@@ -1,18 +1,16 @@
-use std::collections::HashSet;
-use std::hash::{Hash, Hasher};
-use bytes::Bytes;
+mod keys;
+
+use crate::keys::KeyHolder;
+use bytes::{Bytes, BytesMut};
+use getrandom::getrandom;
+use signature::Verifier;
 use ssh_agent_client_rs::{Client, Result};
-use ssh_key::{AuthorizedKeys, PublicKey, Signature};
+use ssh_key::{PublicKey, Signature};
 use std::path::Path;
-use ssh_key::public::KeyData;
-use ssh_encoding::Encode;
 
+const CHALLENGE_SIZE: usize = 32;
 
-pub struct Config {
-    /// The path to the file containing authorized keys
-    _file: String,
-}
-
+/// A small trait defining the two methods of ssh_agent_client_rs::Client to simplify testing
 pub trait SSHAgent {
     fn list_identities(&mut self) -> Result<Vec<PublicKey>>;
     fn sign(&mut self, key: &PublicKey, data: Bytes) -> Result<Signature>;
@@ -22,45 +20,28 @@ impl SSHAgent for Client {
     fn list_identities(&mut self) -> Result<Vec<PublicKey>> {
         self.list_identities()
     }
-
     fn sign(&mut self, key: &PublicKey, data: Bytes) -> Result<Signature> {
         self.sign(key, data)
     }
 }
 
-pub fn authenticate(_config: Config, _agent: impl SSHAgent) -> Result<()> {
-    Ok(())
-}
-
-fn read_public_keys(path: &Path) -> Result<HashSet<HashableKeyData>> {
-    Ok(HashSet::from_iter(AuthorizedKeys::read_file(path)?
-        .into_iter()
-        .map(|e| HashableKeyData(e.public_key().key_data().clone()))
-    ))
-}
-
-#[derive(Eq, PartialEq)]
-struct HashableKeyData(KeyData);
-
-impl Hash for HashableKeyData {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        let mut buf: Vec<u8> = Vec::with_capacity(self.0.encoded_len().unwrap());
-        self.0.encode(&mut buf).expect("failed to encode key into bytes");
-        buf.hash(state);
+pub fn authenticate(keys_file_path: &str, mut agent: impl SSHAgent) -> Result<bool> {
+    let keys = KeyHolder::from_file(Path::new(keys_file_path))?;
+    for key in agent.list_identities()? {
+        if keys.contains(key.key_data()) {
+            return sign_and_verify(key, agent);
+        }
     }
+    Ok(false)
 }
 
-#[cfg(test)]
-mod test {
-    use crate::read_public_keys;
-    use std::path::Path;
+fn sign_and_verify(key: PublicKey, mut agent: impl SSHAgent) -> Result<bool> {
+    let mut data = BytesMut::zeroed(CHALLENGE_SIZE);
+    getrandom(&mut data[..]).expect("Failed to obtain random data to sign");
+    let data = data.freeze();
 
-    #[test]
-    fn test_read_public_keys() {
-        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/authorized_keys");
+    let sig = agent.sign(&key, data.clone())?;
 
-        let result = read_public_keys(Path::new(path)).unwrap();
-
-        assert_eq!(4, result.len());
-    }
+    key.key_data().verify(data.as_ref(), &sig)?;
+    Ok(true)
 }
