@@ -8,9 +8,6 @@ description = """
 A PAM module that authenticates using the ssh-agent.
 """
 
-[lib]
-crate-type = ["dylib"]
-
 [dependencies]
 ssh-agent-client-rs = "0.3.0"
 getrandom = "0.2.9"
