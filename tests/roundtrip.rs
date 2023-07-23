@@ -1,10 +1,10 @@
 use bytes::Bytes;
+use pam_ssh_agent::{authenticate, SSHAgent};
 use signature::Signer;
 use ssh_key::{PrivateKey, PublicKey, Signature};
-use pam_ssh_agent::{authenticate, SSHAgent};
 
 struct DummySshAgent {
-    key: PrivateKey
+    key: PrivateKey,
 }
 
 const PRIVATE_KEY: &str = include_str!("data/id_ed25519");
@@ -12,15 +12,15 @@ const PRIVATE_KEY: &str = include_str!("data/id_ed25519");
 impl DummySshAgent {
     fn new() -> DummySshAgent {
         let key = PrivateKey::from_openssh(PRIVATE_KEY).expect("Failed to parse test key");
-        DummySshAgent{
-            key
-        }
+        DummySshAgent { key }
     }
 }
 
 impl SSHAgent for DummySshAgent {
     fn list_identities(&mut self) -> ssh_agent_client_rs::Result<Vec<PublicKey>> {
-        Ok(vec![PublicKey::from_openssh(include_str!("data/id_ed25519.pub"))?])
+        Ok(vec![PublicKey::from_openssh(include_str!(
+            "data/id_ed25519.pub"
+        ))?])
     }
 
     fn sign(&mut self, _: &PublicKey, data: Bytes) -> ssh_agent_client_rs::Result<Signature> {

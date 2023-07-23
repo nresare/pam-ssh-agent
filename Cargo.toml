@@ -15,4 +15,5 @@ bytes = "1.4.0"
 ssh-key = { version = "0.5.1", features = ["rsa", "dsa", "ed25519", "ecdsa", "p256", "p384"] }
 # we need the signature that ssh-key uses
 signature = "1.6.4"
+pam-bindings = "0.1.1"
 
