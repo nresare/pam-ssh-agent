@@ -1,7 +1,7 @@
+use pam_ssh_agent::authenticate;
+use ssh_agent_client_rs::Client;
 use std::env;
 use std::path::Path;
-use ssh_agent_client_rs::Client;
-use pam_ssh_agent::authenticate;
 
 fn main() -> Result<(), ssh_agent_client_rs::Error> {
     let path = env::var("SSH_AUTH_SOCK").expect("SSH_AUTH_SOCK is not set");

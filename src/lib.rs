@@ -1,47 +1,28 @@
+mod agent;
+mod auth;
 mod keys;
 
-use crate::keys::KeyHolder;
-use bytes::{Bytes, BytesMut};
-use getrandom::getrandom;
-use signature::Verifier;
-use ssh_agent_client_rs::{Client, Result};
-use ssh_key::{PublicKey, Signature};
-use std::path::Path;
+pub use crate::agent::SSHAgent;
+pub use crate::auth::authenticate;
 
-const CHALLENGE_SIZE: usize = 32;
+use pam::constants::{PamFlag, PamResultCode};
+use pam::module::{PamHandle, PamHooks};
 
-/// A small trait defining the two methods of ssh_agent_client_rs::Client to simplify testing
-pub trait SSHAgent {
-    fn list_identities(&mut self) -> Result<Vec<PublicKey>>;
-    fn sign(&mut self, key: &PublicKey, data: Bytes) -> Result<Signature>;
-}
+use std::ffi::CStr;
 
-impl SSHAgent for Client {
-    fn list_identities(&mut self) -> Result<Vec<PublicKey>> {
-        self.list_identities()
+struct PamSshAgent;
+pam::pam_hooks!(PamSshAgent);
+
+impl PamHooks for PamSshAgent {
+    fn sm_authenticate(_pamh: &mut PamHandle, _args: Vec<&CStr>, _flags: PamFlag) -> PamResultCode {
+        PamResultCode::PAM_SUCCESS
     }
-    fn sign(&mut self, key: &PublicKey, data: Bytes) -> Result<Signature> {
-        self.sign(key, data)
+
+    fn sm_setcred(_pamh: &mut PamHandle, _args: Vec<&CStr>, _flags: PamFlag) -> PamResultCode {
+        PamResultCode::PAM_SUCCESS
     }
-}
 
-pub fn authenticate(keys_file_path: &str, mut agent: impl SSHAgent) -> Result<bool> {
-    let keys = KeyHolder::from_file(Path::new(keys_file_path))?;
-    for key in agent.list_identities()? {
-        if keys.contains(key.key_data()) {
-            return sign_and_verify(key, agent);
-        }
+    fn acct_mgmt(_pamh: &mut PamHandle, _args: Vec<&CStr>, _flags: PamFlag) -> PamResultCode {
+        PamResultCode::PAM_SUCCESS
     }
-    Ok(false)
-}
-
-fn sign_and_verify(key: PublicKey, mut agent: impl SSHAgent) -> Result<bool> {
-    let mut data = BytesMut::zeroed(CHALLENGE_SIZE);
-    getrandom(&mut data[..]).expect("Failed to obtain random data to sign");
-    let data = data.freeze();
-
-    let sig = agent.sign(&key, data.clone())?;
-
-    key.key_data().verify(data.as_ref(), &sig)?;
-    Ok(true)
 }
