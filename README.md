@@ -31,8 +31,9 @@ The pam module integration is in a very rough state, but at least it can be used
 of concept. To try it out, these are the rough steps:
 
 * use `debuild -b` to build a `.deb` package with the shared object and install it with `dpkg`
-* For testing I use the `runas` command (to not break my sudo pam config)
-* Replace the common-auth include in `/etc/pam.d/runas` with `auth    required      pam_ssh_agent.so`
+* install `doas`, to ensure that you have a differnt way of elevating your privileges. You will
+  need to add a `permit` line in /etc/doas.conf for it to work
+* Replace the common-auth include in `/etc/pam.d/sudo` with `auth    required      pam_ssh_agent.so`
 * Add the public key from you to `/etc/sudo_ssh_keys`
 
 ## License
