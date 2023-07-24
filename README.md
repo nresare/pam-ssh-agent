@@ -9,9 +9,9 @@ system with the `sudo` command where the identity of the user is confirmed by th
 to provide a signature made with a local ssh-agent and a private key that never leaves the
 designated hardware.
 
-This project is re-implementation of the pam_ssh_agent_auth module but does not share
-any code with that project. The eventual goal of this module is to be functionally equivalent
-and a drop-in replacement instead of pam_ssh_agent_auth.
+This project is re-implementation of the [pam_ssh_agent_auth](https://github.com/jbeverly/pam_ssh_agent_auth) 
+module but does not share any code with that project. The eventual goal of this module is to be 
+functionally equivalent and a drop-in replacement instead of pam_ssh_agent_auth.
 
 ## Project goals
 
