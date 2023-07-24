@@ -34,6 +34,8 @@ of concept. To try it out, these are the rough steps:
 * install `doas`, to ensure that you have a differnt way of elevating your privileges. You will
   need to add a `permit` line in /etc/doas.conf for it to work
 * Replace the common-auth include in `/etc/pam.d/sudo` with `auth    required      pam_ssh_agent.so`
+* Configure `sudo` to not drop the `SSH_AUTH_SOCK` environment variable by
+  adding `Defaults env_keep += "SSH_AUTH_SOCK` to the file `/etc/sudoers.d/ssh_agent_env`
 * Add the public key from you to `/etc/sudo_ssh_keys`
 
 ## License
