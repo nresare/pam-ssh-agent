@@ -1,0 +1,15 @@
+Source: pam-ssh-agent
+Section: libs
+Priority: optional
+Maintainer: Noa <noa@resare.com>
+Build-Depends: debhelper-compat (= 13),
+        libpam0g-dev,
+        cargo
+Standards-Version: 4.6.0
+Homepage: https://github.com/nresare/pam-ssh-agent
+Rules-Requires-Root: no
+
+Package: pam-ssh-agent
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: A PAM Module for authenticating with ssh-agent
