@@ -25,6 +25,16 @@ and ssh-agent-client-rs crates. Using upstream libraries directly is intended to
 easier to ensure that implementation issues with security implication gets addressed in a
 timely manner. A secondary benefit is that supporting a wide range of algorithms is easier.
 
+## Current state
+
+The pam module integration is in a very rough state, but at least it can be used as a proof 
+of concept. To try it out, these are the rough steps:
+
+* use `debuild -b` to build a `.deb` package with the shared object and install it with `dpkg`
+* For testing I use the `runas` command (to not break my sudo pam config)
+* Replace the common-auth include in `/etc/pam.d/runas` with `auth    required      pam_ssh_agent.so`
+* Add the public key from you to `/etc/sudo_ssh_keys`
+
 ## License
 
 Licensed under either of the [Apache License, Version 2.0](http://www.apache.org/licenses/LICENSE-2.0) or the
