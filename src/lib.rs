@@ -2,16 +2,16 @@ mod agent;
 mod auth;
 mod keys;
 
-use std::env;
 pub use crate::agent::SSHAgent;
 pub use crate::auth::authenticate;
+use std::env;
 
 use pam::constants::{PamFlag, PamResultCode};
 use pam::module::{PamHandle, PamHooks};
 
+use ssh_agent_client_rs::Client;
 use std::ffi::CStr;
 use std::path::Path;
-use ssh_agent_client_rs::Client;
 
 struct PamSshAgent;
 pam::pam_hooks!(PamSshAgent);
