@@ -1,6 +1,5 @@
 pub use crate::agent::SSHAgent;
 use crate::keys::KeyHolder;
-use bytes::BytesMut;
 use getrandom::getrandom;
 use signature::Verifier;
 use ssh_agent_client_rs::Result;
@@ -20,11 +19,10 @@ pub fn authenticate(keys_file_path: &str, mut agent: impl SSHAgent) -> Result<bo
 }
 
 fn sign_and_verify(key: PublicKey, mut agent: impl SSHAgent) -> Result<bool> {
-    let mut data = BytesMut::zeroed(CHALLENGE_SIZE);
-    getrandom(&mut data[..]).expect("Failed to obtain random data to sign");
-    let data = data.freeze();
+    let mut data: [u8; CHALLENGE_SIZE] = [0_u8; CHALLENGE_SIZE];
+    getrandom(data.as_mut_slice()).expect("Failed to obtain random data to sign");
 
-    let sig = agent.sign(&key, data.clone())?;
+    let sig = agent.sign(&key, data.as_ref())?;
 
     key.key_data().verify(data.as_ref(), &sig)?;
     Ok(true)

@@ -1,4 +1,3 @@
-use bytes::Bytes;
 use pam_ssh_agent::{authenticate, SSHAgent};
 use signature::Signer;
 use ssh_key::{PrivateKey, PublicKey, Signature};
@@ -23,7 +22,7 @@ impl SSHAgent for DummySshAgent {
         ))?])
     }
 
-    fn sign(&mut self, _: &PublicKey, data: Bytes) -> ssh_agent_client_rs::Result<Signature> {
+    fn sign(&mut self, _: &PublicKey, data: &[u8]) -> ssh_agent_client_rs::Result<Signature> {
         Ok(self.key.key_data().sign(data.as_ref()))
     }
 }
