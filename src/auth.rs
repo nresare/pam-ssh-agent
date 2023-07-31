@@ -1,8 +1,8 @@
 pub use crate::agent::SSHAgent;
 use crate::keys::KeyHolder;
+use anyhow::Result;
 use getrandom::getrandom;
 use signature::Verifier;
-use ssh_agent_client_rs::Result;
 use ssh_key::PublicKey;
 use std::path::Path;
 
