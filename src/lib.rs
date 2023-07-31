@@ -39,6 +39,16 @@ impl PamHooks for PamSshAgent {
             }
         }
     }
+
+    // `doas` calls pam_setcred(), if this is not defined to succeed it prints
+    // a fabulous `doas: pam_setcred(?, PAM_REINITIALIZE_CRED): Permission denied: Unknown error -3`
+    fn sm_setcred(
+        _pam_handle: &mut PamHandle,
+        _args: Vec<&CStr>,
+        _flags: PamFlag,
+    ) -> PamResultCode {
+        PamResultCode::PAM_SUCCESS
+    }
 }
 
 fn do_authenticate(log: &mut SyslogLogger) -> Result<()> {
@@ -53,7 +63,7 @@ fn do_authenticate(log: &mut SyslogLogger) -> Result<()> {
 }
 
 // Just a quick hack to get logging into syslog. Longer term,
-// this should be done pam-bindings: https://github.com/anowell/pam-rs/pull/12
+// this should be done in pam-bindings: https://github.com/anowell/pam-rs/pull/12
 
 const PREFIX: &str = "pam_ssh_agent({}:auth): ";
 
