@@ -14,6 +14,8 @@ use ssh_agent_client_rs::Client;
 use std::ffi::CStr;
 use std::fmt::Display;
 use std::path::Path;
+
+use pam::items::Service;
 use syslog::{Facility, Formatter3164, Logger, LoggerBackend};
 
 struct PamSshAgent;
@@ -21,11 +23,11 @@ pam::pam_hooks!(PamSshAgent);
 
 impl PamHooks for PamSshAgent {
     fn sm_authenticate(
-        _pam_handle: &mut PamHandle,
+        pam_handle: &mut PamHandle,
         _args: Vec<&CStr>,
         _flags: PamFlag,
     ) -> PamResultCode {
-        let mut log = SyslogLogger::new();
+        let mut log = SyslogLogger::new(pam_handle);
 
         match do_authenticate(&mut log) {
             Ok(_) => PamResultCode::PAM_SUCCESS,
@@ -53,28 +55,32 @@ fn do_authenticate(log: &mut SyslogLogger) -> Result<()> {
 // Just a quick hack to get logging into syslog. Longer term,
 // this should be done pam-bindings: https://github.com/anowell/pam-rs/pull/12
 
-const PREFIX: &str = "pam_ssh_agent(sudo:auth): ";
+const PREFIX: &str = "pam_ssh_agent({}:auth): ";
 
 struct SyslogLogger {
     log: Logger<LoggerBackend, Formatter3164>,
+    prefix: String,
 }
 
 impl SyslogLogger {
-    fn new() -> Self {
+    fn new(pam_handle: &PamHandle) -> Self {
         match syslog::unix(Formatter3164 {
             facility: Facility::LOG_AUTHPRIV,
             hostname: None,
             process: String::from("unknown"),
             pid: std::process::id(),
         }) {
-            Ok(log) => SyslogLogger { log },
+            Ok(log) => SyslogLogger {
+                log,
+                prefix: format!("pam_ssh_agent({}:auth): ", get_service(pam_handle)),
+            },
             Err(e) => panic!("Failed to create syslog: {e:?}"),
         }
     }
 
     fn info<S: Display>(&mut self, message: S) -> Result<()> {
         self.log
-            .info(format!("{PREFIX}{message}"))
+            .info(format!("{}{}", self.prefix, message))
             .map_err(|e| anyhow!("failed to log: {e:?}"))
     }
 
@@ -83,4 +89,12 @@ impl SyslogLogger {
             .err(format!("{PREFIX}{message}"))
             .map_err(|e| anyhow!("failed to log: {e:?}"))
     }
+}
+
+fn get_service(pam_handle: &PamHandle) -> String {
+    let service = match pam_handle.get_item::<Service>() {
+        Ok(Some(conv)) => conv,
+        _ => panic!("Can't find service"),
+    };
+    String::from_utf8(service.0.to_bytes().to_vec()).expect("Service name not valid utf-8")
 }
