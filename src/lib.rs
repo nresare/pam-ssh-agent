@@ -14,7 +14,7 @@ use ssh_agent_client_rs::Client;
 use std::ffi::CStr;
 use std::fmt::Display;
 use std::path::Path;
-use syslog::{Formatter3164, Logger, LoggerBackend};
+use syslog::{Facility, Formatter3164, Logger, LoggerBackend};
 
 struct PamSshAgent;
 pam::pam_hooks!(PamSshAgent);
@@ -61,7 +61,12 @@ struct SyslogLogger {
 
 impl SyslogLogger {
     fn new() -> Self {
-        match syslog::unix(Formatter3164::default()) {
+        match syslog::unix(Formatter3164 {
+            facility: Facility::LOG_AUTHPRIV,
+            hostname: None,
+            process: String::from("unknown"),
+            pid: std::process::id(),
+        }) {
             Ok(log) => SyslogLogger { log },
             Err(e) => panic!("Failed to create syslog: {e:?}"),
         }

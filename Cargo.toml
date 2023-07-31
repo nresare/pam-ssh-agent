@@ -1,6 +1,6 @@
 [package]
 name = "pam-ssh-agent"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/nresare/pam-ssh-agent"
@@ -22,6 +22,6 @@ anyhow = "1.0.72"
 pam-bindings = "0.1.1"
 syslog = "6.1.0"
 
-# Since we are building on ubuntu 2021.04, we need to downgrade this
+# Since we are building on ubuntu 2022.04, we need to downgrade this
 # to a version that supports the compiler
 time="=0.3.23"
