@@ -11,4 +11,11 @@ Rules-Requires-Root: no
 Package: pam-ssh-agent
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: A PAM Module for authenticating with ssh-agent
+Description: PAM Module for authenticating with ssh-agent
+ Shared library that gets installed where libpam looks for
+ modules. When referenced in a pam configuration, the module
+ implements authentication success or failure based on whether
+ the ssh-agent referenced by the SSH_AUTH_SOCK environment
+ variable can correctly sign a random challenge with the private
+ key corresponding to any of the public keys referenced in 
+ the module configuration args. 
