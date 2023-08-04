@@ -1,0 +1,14 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: pam-ssh-agent
+Source: https://github.com/nresare/pam-ssh-agent
+
+Files:
+ src/*
+ tests/*
+ examples/*
+ Makefile
+ README.*
+ Cargo.*
+Copyright: 2023 Noa Resare
+License: MIT or Apache-2.0
+
