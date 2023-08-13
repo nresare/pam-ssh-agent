@@ -11,7 +11,7 @@ impl KeyHolder {
     pub(crate) fn from_file(path: &Path) -> Result<Self> {
         let keys = Vec::from_iter(
             AuthorizedKeys::read_file(path)
-                .context(format!("Failed to read from '{:?}'", path))?
+                .context(format!("Failed to read from {:?}", path))?
                 .into_iter()
                 .map(|e| e.public_key().key_data().to_owned()),
         );

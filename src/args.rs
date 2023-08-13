@@ -1,5 +1,6 @@
 use std::ffi::CStr;
 
+/// Argument parsing.
 #[derive(Debug, Eq, PartialEq)]
 pub struct Args {
     pub debug: bool,
@@ -7,6 +8,7 @@ pub struct Args {
 }
 
 impl Args {
+    /// Parses args and returns an Args instance with the parsed arguments
     pub fn parse(args: Vec<&CStr>) -> Self {
         let mut debug = false;
         let mut file: String = "/etc/security/authorized_keys".into();

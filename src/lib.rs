@@ -24,6 +24,13 @@ struct PamSshAgent;
 pam::pam_hooks!(PamSshAgent);
 
 impl PamHooks for PamSshAgent {
+    /// The authentication method called by pam to authenticate the user. This method
+    /// will return PAM_SUCCESS if the ssh-agent available through the unix socket path
+    /// in the PAM_AUTH_SOCK environment variable is able to correctly sign a random
+    /// message with the private key corresponding to one of the public keys in in
+    /// /etc/security/authorized_key. Otherwise this function returns PAM_AUTH_ERR.
+    ///
+    /// This method logs diagnostic output to the AUTHPRIV facility.
     fn sm_authenticate(
         pam_handle: &mut PamHandle,
         args: Vec<&CStr>,
@@ -68,6 +75,8 @@ fn do_authenticate(log: &mut impl Log, args: &Args) -> Result<()> {
     }
 }
 
+/// Fetch the name of the current service, i.e. the software that uses pam for authentication
+/// using the PamHandle::get_item() method.
 fn get_service(pam_handle: &PamHandle) -> String {
     let service = match pam_handle.get_item::<Service>() {
         Ok(Some(service)) => service,
