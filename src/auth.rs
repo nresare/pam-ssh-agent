@@ -9,6 +9,12 @@ use std::path::Path;
 
 const CHALLENGE_SIZE: usize = 32;
 
+/// Finds the first key, if any, that the ssh-agent knows about that is also present
+/// in the file referenced by keys_file_path, sends a random message to be signed and
+/// verifies the signature with the public key.
+///
+/// Returns Ok(true) if a key was found and the signature was correct, Ok(false) if no
+/// key was found, and Err if agent communication or signature verification failed.
 pub fn authenticate(
     keys_file_path: &str,
     mut agent: impl SSHAgent,
@@ -29,8 +35,7 @@ pub fn authenticate(
 
 fn sign_and_verify(key: PublicKey, mut agent: impl SSHAgent) -> Result<bool> {
     let mut data: [u8; CHALLENGE_SIZE] = [0_u8; CHALLENGE_SIZE];
-    getrandom(data.as_mut_slice()).expect("Failed to obtain random data to sign");
-
+    getrandom(data.as_mut_slice())?;
     let sig = agent.sign(&key, data.as_ref())?;
 
     key.key_data().verify(data.as_ref(), &sig)?;
