@@ -1,3 +1,4 @@
+use anyhow::{Context, Result};
 use ssh_key::public::KeyData;
 use ssh_key::AuthorizedKeys;
 use std::path::Path;
@@ -7,9 +8,10 @@ pub struct KeyHolder {
 }
 
 impl KeyHolder {
-    pub(crate) fn from_file(path: &Path) -> Result<Self, ssh_key::Error> {
+    pub(crate) fn from_file(path: &Path) -> Result<Self> {
         let keys = Vec::from_iter(
-            AuthorizedKeys::read_file(path)?
+            AuthorizedKeys::read_file(path)
+                .context(format!("Failed to read from '{:?}'", path))?
                 .into_iter()
                 .map(|e| e.public_key().key_data().to_owned()),
         );
