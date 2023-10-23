@@ -1,10 +1,11 @@
 pub use crate::agent::SSHAgent;
-use crate::keys::KeyHolder;
 use crate::log::Log;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use getrandom::getrandom;
 use signature::Verifier;
-use ssh_key::PublicKey;
+use ssh_key::public::KeyData;
+use ssh_key::{AuthorizedKeys, PublicKey};
+use std::collections::HashSet;
 use std::path::Path;
 
 const CHALLENGE_SIZE: usize = 32;
@@ -20,7 +21,7 @@ pub fn authenticate(
     mut agent: impl SSHAgent,
     log: &mut impl Log,
 ) -> Result<bool> {
-    let keys = KeyHolder::from_file(Path::new(keys_file_path))?;
+    let keys = keys_from_file(Path::new(keys_file_path))?;
     for key in agent.list_identities()? {
         if keys.contains(key.key_data()) {
             log.debug(format!(
@@ -40,4 +41,42 @@ fn sign_and_verify(key: PublicKey, mut agent: impl SSHAgent) -> Result<bool> {
 
     key.key_data().verify(data.as_ref(), &sig)?;
     Ok(true)
+}
+
+fn keys_from_file(path: &Path) -> Result<HashSet<KeyData>> {
+    Ok(HashSet::from_iter(
+        AuthorizedKeys::read_file(path)
+            .context(format!("Failed to read from {:?}", path))?
+            .into_iter()
+            .map(|e| e.public_key().key_data().to_owned()),
+    ))
+}
+
+#[cfg(test)]
+mod test {
+    use crate::auth::keys_from_file;
+    use ssh_key::PublicKey;
+    use std::path::Path;
+
+    const KEY_FROM_AUTHORIZED_KEYS: &'static str = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIObUcR\
+        y1Nv6fz4xnAXqOaFL/A+gGM9OF+l2qpsDPmMlU test@ed25519";
+
+    const ANOTHER_KEY: &'static str = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMdtbb2fnK02RReYsJW\
+        jh1F2q102dIer60vbgj+cABcO noa@Noas-Laptop.local";
+
+    #[test]
+    fn test_read_public_keys() {
+        let path = Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/data/authorized_keys"
+        ));
+
+        let result = keys_from_file(path).expect("Failed to parse");
+
+        let key = PublicKey::from_openssh(KEY_FROM_AUTHORIZED_KEYS).unwrap();
+        assert_eq!(true, result.contains(key.key_data()));
+
+        let key = PublicKey::from_openssh(ANOTHER_KEY).unwrap();
+        assert_eq!(false, result.contains(key.key_data()));
+    }
 }
