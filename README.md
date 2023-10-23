@@ -32,7 +32,7 @@ timely manner. A secondary benefit is that it is easier to support a wide range 
 
 ## Usage
 
-* use `debuild -b` to build a `.deb` package with the shared object and install it with `dpkg`
+* use `debuild --prepend-path=/snap/bin -b` to build a `.deb` package with the shared object and install it with `dpkg` (this assumes that rust is installed via the rustup snap)
 * install `doas`, to ensure that you have a different way of elevating your privileges than sudo.
   You will need to add a `permit` line in `/etc/doas.conf` for it to work
 * Replace the `common-auth` include in `/etc/pam.d/sudo` with `auth    required      pam_ssh_agent.so`
