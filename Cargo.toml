@@ -13,15 +13,15 @@ name = "pam_ssh_agent"
 crate-type = ["lib", "cdylib"]
 
 [dependencies]
-ssh-agent-client-rs = "0.5.0"
-getrandom = "0.2.9"
-ssh-key = { version = "0.5.1", features = ["rsa", "dsa", "ed25519", "ecdsa", "p256", "p384"] }
+ssh-agent-client-rs = "0.9.0"
+getrandom = "0.2.10"
+ssh-key = { version = "0.6.2", features = ["crypto"] }
 # we need the signature that ssh-key uses
-signature = "1.6.4"
-anyhow = "1.0.72"
+signature = "2.1.0"
+anyhow = "1.0.75"
 pam-bindings = "0.1.1"
 syslog = "6.1.0"
 
 # Since we are building on ubuntu 2022.04, we need to downgrade this
 # to a version that supports the compiler
-time="=0.3.23"
+time = "0.3.30"
