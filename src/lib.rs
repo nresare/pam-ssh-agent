@@ -1,7 +1,6 @@
 mod agent;
 mod args;
 mod auth;
-mod keys;
 mod log;
 
 pub use crate::agent::SSHAgent;
