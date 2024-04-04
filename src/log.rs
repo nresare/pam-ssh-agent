@@ -16,17 +16,17 @@ pub struct PrintLog;
 
 impl Log for PrintLog {
     fn debug<S: Display>(&mut self, message: S) -> Result<()> {
-        print!("DEBUG: {}", message);
+        println!("DEBUG: {}", message);
         Ok(())
     }
 
     fn info<S: Display>(&mut self, message: S) -> Result<()> {
-        print!("INFO: {}", message);
+        println!("INFO: {}", message);
         Ok(())
     }
 
     fn error<S: Display>(&mut self, message: S) -> Result<()> {
-        print!("ERROR: {}", message);
+        println!("ERROR: {}", message);
         Ok(())
     }
 }
