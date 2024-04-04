@@ -33,8 +33,5 @@ fn test_roundtrip() {
     // Yes, it is a bit weird that compile time paths resolve from this dir but run time
     // paths resolve from the top dir. I'll come up with a better solution later.
     let auth_keys = "tests/data/authorized_keys";
-    assert_eq!(
-        true,
-        authenticate(auth_keys, agent, &mut PrintLog {}).unwrap()
-    )
+    assert!(authenticate(auth_keys, agent, &mut PrintLog {}).unwrap())
 }

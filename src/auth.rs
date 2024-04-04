@@ -3,6 +3,7 @@ use crate::log::Log;
 use anyhow::{Context, Result};
 use getrandom::getrandom;
 use signature::Verifier;
+use ssh_agent_client_rs::Error as SACError;
 use ssh_key::public::KeyData;
 use ssh_key::{AuthorizedKeys, PublicKey};
 use std::collections::HashSet;
@@ -28,16 +29,28 @@ pub fn authenticate(
                 "found a matching key: {}",
                 key.fingerprint(Default::default())
             ))?;
-            return sign_and_verify(key, agent);
+            // Allow sign_and_verify() to return RemoteFailure (key not loaded / present),
+            // and try the next configured key
+            match sign_and_verify(&key, &mut agent) {
+                Ok(res) => return Ok(res),
+                Err(e) => {
+                    if let Some(SACError::RemoteFailure) = e.downcast_ref::<SACError>() {
+                        log.debug("SSHAgent: RemoteFailure; trying next key")?;
+                        continue;
+                    } else {
+                        return Err(e);
+                    }
+                }
+            }
         }
     }
     Ok(false)
 }
 
-fn sign_and_verify(key: PublicKey, mut agent: impl SSHAgent) -> Result<bool> {
+fn sign_and_verify(key: &PublicKey, agent: &mut impl SSHAgent) -> Result<bool> {
     let mut data: [u8; CHALLENGE_SIZE] = [0_u8; CHALLENGE_SIZE];
     getrandom(data.as_mut_slice())?;
-    let sig = agent.sign(&key, data.as_ref())?;
+    let sig = agent.sign(key, data.as_ref())?;
 
     key.key_data().verify(data.as_ref(), &sig)?;
     Ok(true)
@@ -58,10 +71,10 @@ mod test {
     use ssh_key::PublicKey;
     use std::path::Path;
 
-    const KEY_FROM_AUTHORIZED_KEYS: &'static str = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIObUcR\
+    const KEY_FROM_AUTHORIZED_KEYS: &str = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIObUcR\
         y1Nv6fz4xnAXqOaFL/A+gGM9OF+l2qpsDPmMlU test@ed25519";
 
-    const ANOTHER_KEY: &'static str = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMdtbb2fnK02RReYsJW\
+    const ANOTHER_KEY: &str = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMdtbb2fnK02RReYsJW\
         jh1F2q102dIer60vbgj+cABcO noa@Noas-Laptop.local";
 
     #[test]
@@ -74,9 +87,9 @@ mod test {
         let result = keys_from_file(path).expect("Failed to parse");
 
         let key = PublicKey::from_openssh(KEY_FROM_AUTHORIZED_KEYS).unwrap();
-        assert_eq!(true, result.contains(key.key_data()));
+        assert!(result.contains(key.key_data()));
 
         let key = PublicKey::from_openssh(ANOTHER_KEY).unwrap();
-        assert_eq!(false, result.contains(key.key_data()));
+        assert!(!result.contains(key.key_data()));
     }
 }
