@@ -1,8 +1,16 @@
+pam-ssh-agent (0.5.0) UNRELEASED; urgency=medium
+
+  * Handle removed hardware keys
+  * Updated dependencies, support sk-ecdsa
+
+ -- Noa Resare <noa@resare.com>  Sat, 06 Apr 2024 20:21:00 +0100
+
 pam-ssh-agent (0.4.0) UNRELEASED; urgency=medium
 
   * Updated dependencies
 
  -- Noa Resare <noa@resare.com>  Mon, 23 Oct 2023 19:19:30 +0000
+
 
 pam-ssh-agent (0.3.0) UNRELEASED; urgency=medium
  
