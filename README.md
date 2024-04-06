@@ -32,7 +32,7 @@ timely manner. A secondary benefit is that it is easier to support a wide range 
 
 ## Usage
 
-* use `debuild --prepend-path=/snap/bin -b` to build a `.deb` package with the shared object and install it with `dpkg` (this assumes that rust is installed via the rustup snap)
+* use `debuild -b` to build a `.deb` package with the shared object and install it with `dpkg`
 * install `doas`, to ensure that you have a different way of elevating your privileges than sudo.
   You will need to add a `permit` line in `/etc/doas.conf` for it to work
 * Replace the `common-auth` include in `/etc/pam.d/sudo` with `auth    required      pam_ssh_agent.so`
@@ -53,6 +53,12 @@ configuration file in `/etc/pam.d`. pam_ssh_agent currently understands the foll
 
 Licensed under either of the [Apache License, Version 2.0](http://www.apache.org/licenses/LICENSE-2.0) or the
 [MIT license](http://opensource.org/licenses/MIT) at your option.
+
+## How to contribute
+
+Just open a pull request against https://github.com/nresare/pam-ssh-agent. I have a github action
+that runs the test, `cargo fmt` and `cargo clippy` against diffs (as soon as I get around to trigger them)
+so it would be nice if you ran `make check` first locally to save a round-trip or two.
 
 ### Contribution licensing
 
