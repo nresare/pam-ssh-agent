@@ -9,3 +9,8 @@ install:
 clean:
 	cargo clean
 
+
+check:
+	cargo fmt --check
+	cargo clippy
+	cargo test
