@@ -1,5 +1,7 @@
 use std::ffi::CStr;
 
+const DEFAULT_AUTHORIZED_KEYS_PATH: &str = "/etc/security/authorized_keys";
+
 /// Argument parsing.
 #[derive(Debug, Eq, PartialEq)]
 pub struct Args {
@@ -7,11 +9,20 @@ pub struct Args {
     pub file: String,
 }
 
+impl Default for Args {
+    fn default() -> Self {
+        Args {
+            debug: false,
+            file: String::from(DEFAULT_AUTHORIZED_KEYS_PATH),
+        }
+    }
+}
+
 impl Args {
     /// Parses args and returns an Args instance with the parsed arguments
     pub fn parse(args: Vec<&CStr>) -> Self {
         let mut debug = false;
-        let mut file: String = "/etc/security/authorized_keys".into();
+        let mut file: String = String::from(DEFAULT_AUTHORIZED_KEYS_PATH);
 
         for arg in args
             .iter()
@@ -63,21 +74,19 @@ mod test {
 
     #[test]
     fn test_parse() {
-        let expected = Args {
-            debug: false,
-            file: "/etc/security/authorized_keys".into(),
-        };
+        let expected = Args::default();
         assert_eq!(expected, Args::parse(args!().refs()));
 
         let expected = Args {
             debug: true,
-            file: "/etc/security/authorized_keys".into(),
+            ..Default::default()
         };
         assert_eq!(expected, Args::parse(args!("debug").refs()));
 
         let expected = Args {
             debug: true,
             file: "/dev/null".into(),
+            ..Default::default()
         };
         assert_eq!(
             expected,
