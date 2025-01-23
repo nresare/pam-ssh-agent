@@ -14,7 +14,7 @@ This project is re-implementation of the [pam_ssh_agent_auth](https://github.com
 module but does not share any code with that project. The eventual goal of this module is to be 
 functionally equivalent and a drop-in replacement for `pam_ssh_agent_auth`.
 
-This project is currently in a usable state, and has been tested with Ubuntu 22.04. As of now, 
+This project is currently in a usable state, and has been tested with Ubuntu 24.04. As of now, 
 the path expansion patterns that pam_ssh_agent_auth provides are not implemented. In other 
 words a single authorized_keys file is expected to be used.
 
@@ -34,8 +34,9 @@ timely manner. A secondary benefit is that it is easier to support a wide range 
 
 * use `debuild -b` to build a `.deb` package with the shared object and install it with `dpkg`
 * install `doas`, to ensure that you have a different way of elevating your privileges than sudo.
-  You will need to add a `permit` line in `/etc/doas.conf` for it to work
-* Replace the `common-auth` include in `/etc/pam.d/sudo` with `auth    required      pam_ssh_agent.so`
+  You will need to add a `permit` line in `/etc/doas.conf` for it to work. This is not strictly
+  necessary but since this is still experimental 
+* Replace the `common-auth` include in `/etc/pam.d/sudo` with `auth  required   pam_ssh_agent.so`
 * Configure `sudo` to not drop the `SSH_AUTH_SOCK` environment variable by
   adding `Defaults env_keep += "SSH_AUTH_SOCK` to the file `/etc/sudoers.d/ssh_agent_env`
 * Add the public key that your ssh-agent knows about to `/etc/security/authorized_keys`
@@ -47,7 +48,10 @@ configuration file in `/etc/pam.d`. pam_ssh_agent currently understands the foll
 
 * `debug` This will increase log output to the AUTHPRIV syslog facility
 * `file=/file/name` This will modify the file holding the authorized public keys instead of the
-  default `/etc/security/authorized_keys`.
+  default `/etc/security/authorized_keys`
+* `default_ssh_auth_sock=/path/to/ssh_agent_unix_socket` the path to use if the `SSH_AUTH_SOCKET` is not
+  set
+  
 
 ## License
 

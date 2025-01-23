@@ -6,13 +6,13 @@ mod log;
 pub use crate::agent::SSHAgent;
 pub use crate::auth::authenticate;
 pub use crate::log::PrintLog;
-use std::env;
-
 use pam::constants::{PamFlag, PamResultCode};
 use pam::module::{PamHandle, PamHooks};
+use std::env;
+use std::env::VarError;
 
 use crate::log::{Log, SyslogLogger};
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use args::Args;
 use pam::items::Service;
 use ssh_agent_client_rs::Client;
@@ -35,8 +35,18 @@ impl PamHooks for PamSshAgent {
         args: Vec<&CStr>,
         _flags: PamFlag,
     ) -> PamResultCode {
-        let args = Args::parse(args);
-        let mut log = SyslogLogger::new(&get_service(pam_handle), args.debug);
+        let mut log = SyslogLogger::new(&get_service(pam_handle), Args::default().debug);
+        let args = match Args::parse(args) {
+            Ok(args) => args,
+            Err(e) => {
+                log.error(format!("Failed to parse args: {e}"))
+                    .expect("Failed to log");
+                return PamResultCode::PAM_SERVICE_ERR;
+            }
+        };
+        if args.debug != Args::default().debug {
+            log = SyslogLogger::new(&get_service(pam_handle), args.debug);
+        }
 
         match do_authenticate(&mut log, &args) {
             Ok(_) => PamResultCode::PAM_SUCCESS,
@@ -61,8 +71,7 @@ impl PamHooks for PamSshAgent {
 }
 
 fn do_authenticate(log: &mut impl Log, args: &Args) -> Result<()> {
-    let path = env::var("SSH_AUTH_SOCK")
-        .context("Required environment variable SSH_AUTH_SOCK is not set")?;
+    let path = get_path(args)?;
     log.info(format!(
         "Authenticating using ssh-agent at '{}' and keys from '{}'",
         path, args.file
@@ -71,6 +80,23 @@ fn do_authenticate(log: &mut impl Log, args: &Args) -> Result<()> {
     match authenticate(args.file.as_str(), ssh_agent_client, log)? {
         true => Ok(()),
         false => Err(anyhow!("Agent did not know of any of the allowed keys")),
+    }
+}
+
+fn get_path(args: &Args) -> Result<String> {
+    match env::var("SSH_AUTH_SOCK") {
+        Ok(path) => return Ok(path),
+        // It is not an error if this variable is not present, just continue down the function
+        Err(VarError::NotPresent) => {}
+        Err(_) => {
+            return Err(anyhow!("Failed to read environment variable SSH_AUTH_SOCK"));
+        }
+    }
+    match &args.default_ssh_auth_sock {
+        Some(path) => Ok(path.to_string()),
+        None => Err(anyhow!(
+            "SSH_AUTH_SOCK not set and the default_ssh_auth_sock parameter is not set"
+        )),
     }
 }
 
