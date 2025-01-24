@@ -1,3 +1,10 @@
+pam-ssh-agent (0.5.1) UNRELEASED; urgency=medium
+
+  * Add support for configuring the path to the ssh-agent socket
+    in the pam configuration
+
+ -- Noa Resare <noa@resare.com>  Thu, 23 Jan 2025 17:56:25 +0000
+
 pam-ssh-agent (0.5.0) UNRELEASED; urgency=medium
 
   * Handle removed hardware keys
