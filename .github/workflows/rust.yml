@@ -26,7 +26,7 @@ jobs:
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
     - uses: actions/checkout@v3
     - name: Install libpam
-      run: sudo apt -y install libpam0g-dev
+      run: sudo apt -y install libpam0g-dev devscripts
     - name: Build
       run: cargo build --verbose
     - name: Run tests
@@ -35,3 +35,5 @@ jobs:
       run: cargo fmt --check
     - name: Clippy check
       run: cargo clippy --no-deps
+    - name: Build debian package
+      run: debuild -b
