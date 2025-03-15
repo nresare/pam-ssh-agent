@@ -14,11 +14,10 @@ name = "pam_ssh_agent"
 crate-type = ["lib", "cdylib"]
 
 [dependencies]
-ssh-agent-client-rs = "0.9.1"
-getrandom = "0.2.13"
+ssh-agent-client-rs = "1.0.0"
+getrandom = "0.3.1"
 ssh-key = { version = "0.6.5", features = ["crypto"] }
-# we need the signature that ssh-key uses
 signature = "2.2.0"
-anyhow = "1.0.81"
+anyhow = "1.0.97"
 pam-bindings = "0.1.1"
-syslog = "6.1.0"
+syslog = "7.0.0"
