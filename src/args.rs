@@ -1,4 +1,6 @@
+use crate::expansions::{expand_vars, Environment};
 use anyhow::{anyhow, Result};
+use std::borrow::Cow;
 use std::ffi::CStr;
 use std::ops::Deref;
 
@@ -23,8 +25,8 @@ impl Default for Args {
 }
 
 impl Args {
-    /// Parses args and returns an Args instance with the parsed arguments
-    pub fn parse(args: Vec<&CStr>) -> Result<Self> {
+    /// Parses args and returns an Args instance with the parsed arguments, if pam_handle
+    pub fn parse(args: Vec<&CStr>, env: Option<&dyn Environment>) -> Result<Self> {
         let mut debug = false;
         let mut file: String = String::from(DEFAULT_AUTHORIZED_KEYS_PATH);
         let mut default_ssh_auth_sock = None;
@@ -37,6 +39,11 @@ impl Args {
             match arg.deref() {
                 "debug" => debug = true,
                 any => {
+                    let any = match env {
+                        Some(env) => expand_vars(any, env)?,
+                        None => Cow::from(any),
+                    };
+
                     let parts: Vec<&str> = any.splitn(2, "=").collect();
                     if parts.len() != 2 {
                         return Err(anyhow!("Could not split '{any}' using '='"));
@@ -94,13 +101,13 @@ mod test {
     #[test]
     fn test_parse() -> Result<()> {
         let expected = Args::default();
-        assert_eq!(expected, Args::parse(args!().refs())?);
+        assert_eq!(expected, Args::parse(args!().refs(), None)?);
 
         let expected = Args {
             debug: true,
             ..Default::default()
         };
-        assert_eq!(expected, Args::parse(args!("debug").refs())?);
+        assert_eq!(expected, Args::parse(args!("debug").refs(), None)?);
 
         let expected = Args {
             debug: true,
@@ -109,7 +116,7 @@ mod test {
         };
         assert_eq!(
             expected,
-            Args::parse(args!("debug", "file=/dev/null").refs())?,
+            Args::parse(args!("debug", "file=/dev/null").refs(), None)?,
         );
 
         let expected = Args {
@@ -118,19 +125,22 @@ mod test {
         };
         assert_eq!(
             expected,
-            Args::parse(args!("default_ssh_auth_sock=/var/run/ssh_agent.sock").refs())?
+            Args::parse(
+                args!("default_ssh_auth_sock=/var/run/ssh_agent.sock").refs(),
+                None
+            )?
         );
 
         assert_eq!(
             "Could not split 'unknown' using '='",
-            Args::parse(args!("unknown").refs())
+            Args::parse(args!("unknown").refs(), None)
                 .unwrap_err()
                 .to_string(),
         );
 
         assert_eq!(
             "Unknown parameter key 'bad_key'",
-            Args::parse(args!("bad_key=value").refs())
+            Args::parse(args!("bad_key=value").refs(), None)
                 .unwrap_err()
                 .to_string(),
         );
