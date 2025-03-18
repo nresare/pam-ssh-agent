@@ -22,3 +22,5 @@ signature = "2.2.0"
 anyhow = "1.0.81"
 pam-bindings = "0.1.1"
 syslog = "6.1.0"
+users = { version = "0.11.0", default-features = false }
+hostname = { version = "0.4.1", default-features = false }

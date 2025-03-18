@@ -1,6 +1,7 @@
 mod agent;
 mod args;
 mod auth;
+mod expansions;
 mod log;
 
 pub use crate::agent::SSHAgent;
@@ -11,6 +12,7 @@ use pam::module::{PamHandle, PamHooks};
 use std::env;
 use std::env::VarError;
 
+use crate::expansions::UnixEnvironment;
 use crate::log::{Log, SyslogLogger};
 use anyhow::{anyhow, Result};
 use args::Args;
@@ -36,7 +38,8 @@ impl PamHooks for PamSshAgent {
         _flags: PamFlag,
     ) -> PamResultCode {
         let mut log = SyslogLogger::new(&get_service(pam_handle), Args::default().debug);
-        let args = match Args::parse(args) {
+
+        let args = match Args::parse(args, Some(&UnixEnvironment::new(pam_handle))) {
             Ok(args) => args,
             Err(e) => {
                 log.error(format!("Failed to parse args: {e}"))

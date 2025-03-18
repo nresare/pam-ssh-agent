@@ -32,14 +32,17 @@ timely manner. A secondary benefit is that it is easier to support a wide range 
 
 ## Usage
 
-* use `debuild -b` to build a `.deb` package with the shared object and install it with `dpkg`
+* If you are usinga debian derived operating system, use `debuild -b` to build a `.deb` package 
+  with the shared object and install it with `dpkg`
 * install `doas`, to ensure that you have a different way of elevating your privileges than sudo.
   You will need to add a `permit` line in `/etc/doas.conf` for it to work. This is not strictly
   necessary but since this is still experimental 
 * Replace the `common-auth` include in `/etc/pam.d/sudo` with `auth  required   pam_ssh_agent.so`
 * Configure `sudo` to not drop the `SSH_AUTH_SOCK` environment variable by
-  adding `Defaults env_keep += "SSH_AUTH_SOCK` to the file `/etc/sudoers.d/ssh_agent_env`
+  adding `Defaults env_keep += "SSH_AUTH_SOCK"` to the file `/etc/sudoers.d/ssh_agent_env`
 * Add the public key that your ssh-agent knows about to `/etc/security/authorized_keys`
+* If you are using a systemd based linux system, you can observe the output of this crate using 
+  `journalctl -f --facility authpriv`
 
 ## Configuration options
 
@@ -48,10 +51,31 @@ configuration file in `/etc/pam.d`. pam_ssh_agent currently understands the foll
 
 * `debug` This will increase log output to the AUTHPRIV syslog facility
 * `file=/file/name` This will modify the file holding the authorized public keys instead of the
-  default `/etc/security/authorized_keys`
+  default `/etc/security/authorized_keys`. This path is subject to the variable expansions mentioned below
 * `default_ssh_auth_sock=/path/to/ssh_agent_unix_socket` the path to use if the `SSH_AUTH_SOCKET` is not
   set
   
+## Variable expansions
+
+> :warning: Using the home directory expansion is unsafe. It allows an attacker with access to an account with sudo
+> rights to elevate their privileges with an ssh key of their choosing. If such a setup is desired, configuring
+> sudo with the `NOPASSWD` option is a better option as it makes the insecure configuration explicit.
+
+It is possible to use variable expansion in any of the configuration options. In the current age of configuration
+management systems, it might make more sense to move the complexity of using the right `authorized_keys` file 
+to those systems, but these variable expansions are available to uses that might want them to provide a smooth upgrade
+path from `pam_ssh_agent_auth`.
+
+* `~` same as in shells, without specifying a username this expands to the home directory referred to by `PAM_RUSER`, 
+  normally the user attempting to authenticate. If a username is specified, the home directory of that user will be
+  used such that `~alice` might expand to `/home/alice`
+* `%h` same as `~`, the home directory of the user referred to by the PAM item `PAM_RUSER`
+* `%H` the value returned by `gethostname(3)`, truncated after the first period such that if `gethostname(3)` returns
+  `host.example.com` this `%H` will turn into `host`
+* `%f` the value returned by `gethostname(3)`. For the systems I have looked at, this value is not a fully qualified
+  domain name but if it was it would be returned. This behaviour, although a bit surprising is consistent with how
+  `pam_ssh_agent_auth` works.
+
 
 ## License
 
