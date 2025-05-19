@@ -32,7 +32,7 @@ timely manner. A secondary benefit is that it is easier to support a wide range 
 
 ## Usage
 
-* If you are usinga debian derived operating system, use `debuild -b` to build a `.deb` package 
+* If you are using a debian derived operating system, use `debuild -b` to build a `.deb` package 
   with the shared object and install it with `dpkg`
 * install `doas`, to ensure that you have a different way of elevating your privileges than sudo.
   You will need to add a `permit` line in `/etc/doas.conf` for it to work. This is not strictly
@@ -74,7 +74,9 @@ path from `pam_ssh_agent_auth`.
   `host.example.com` this `%H` will turn into `host`
 * `%f` the value returned by `gethostname(3)`. For the systems I have looked at, this value is not a fully qualified
   domain name but if it was it would be returned. This behaviour, although a bit surprising is consistent with how
-  `pam_ssh_agent_auth` works.
+  `pam_ssh_agent_auth` works
+* `%u` the username of the user attempting to authenticate
+* `%U` numeric uid of the user attempting to authenticate
 
 
 ## License
