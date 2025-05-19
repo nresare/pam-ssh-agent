@@ -13,6 +13,8 @@ pub trait Environment {
     fn get_hostname(&self) -> Result<Cow<str>>;
 
     fn get_fqdn(&self) -> Result<Cow<str>>;
+
+    fn get_uid(&self) -> Result<Cow<str>>;
 }
 
 pub struct UnixEnvironment<'a> {
@@ -59,6 +61,13 @@ impl<'a> Environment for UnixEnvironment<'a> {
     fn get_fqdn(&self) -> Result<Cow<str>> {
         Ok(Cow::from(get_hostname()?))
     }
+
+    fn get_uid(&self) -> Result<Cow<str>> {
+        let username = self.get_username()?;
+        let user = get_user_by_name(&username as &str)
+            .ok_or_else(|| anyhow!("Failed to look up user with username {}", username))?;
+        Ok(Cow::from(user.uid().to_string()))
+    }
 }
 
 fn get_hostname() -> Result<String> {
@@ -82,6 +91,7 @@ pub fn expand_vars<'a>(input: &'a str, env: &'a dyn Environment) -> Result<Cow<'
     input = expand_var(input, "%H", || env.get_hostname())?;
     input = expand_var(input, "%u", || env.get_username())?;
     input = expand_var(input, "%f", || env.get_fqdn())?;
+    input = expand_var(input, "%U", || env.get_uid())?;
     Ok(input)
 }
 
@@ -166,6 +176,14 @@ mod tests {
     }
 
     #[test]
+    fn test_expand_var_uid() -> Result<()> {
+        let f = || Ok(Cow::from("401"));
+        let result = expand_var(Cow::from("/etc/%d/file"), "%d", f)?;
+        assert_eq!(&result, "/etc/401/file");
+        Ok(())
+    }
+
+    #[test]
     fn test_expand_vars() -> Result<()> {
         let env = DummyEnv::new(vec!["/another/bob", "host", "user"]);
         let result = expand_vars("~bob/.foo/%H/%u/file", &env)?;
@@ -212,6 +230,10 @@ mod tests {
         }
 
         fn get_fqdn(&self) -> Result<Cow<str>> {
+            self.answer()
+        }
+
+        fn get_uid(&self) -> Result<Cow<str>> {
             self.answer()
         }
     }
