@@ -44,7 +44,7 @@ impl Args {
                         None => Cow::from(any),
                     };
 
-                    let parts: Vec<&str> = any.splitn(2, "=").collect();
+                    let parts: Vec<&str> = any.splitn(2, '=').collect();
                     if parts.len() != 2 {
                         return Err(anyhow!("Could not split '{any}' using '='"));
                     }
