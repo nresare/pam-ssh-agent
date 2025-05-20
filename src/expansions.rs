@@ -2,8 +2,8 @@ use anyhow::{anyhow, Result};
 use pam::items::RUser;
 use pam::module::PamHandle;
 use std::borrow::Cow;
-use users::get_user_by_name;
-use users::os::unix::UserExt;
+use uzers::get_user_by_name;
+use uzers::os::unix::UserExt;
 
 pub trait Environment {
     fn get_homedir(&self, user: &str) -> Result<Cow<str>>;
