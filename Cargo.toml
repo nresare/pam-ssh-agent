@@ -14,13 +14,14 @@ name = "pam_ssh_agent"
 crate-type = ["lib", "cdylib"]
 
 [dependencies]
-ssh-agent-client-rs = "0.9.1"
-getrandom = "0.2.13"
-ssh-key = { version = "0.6.5", features = ["crypto"] }
-# we need the signature that ssh-key uses
+ssh-agent-client-rs = "1.0.0"
+getrandom = "0.3.3"
+ssh-key = { version = "0.6.7", features = ["crypto"] }
 signature = "2.2.0"
-anyhow = "1.0.81"
+anyhow = "1.0.98"
 pam-bindings = "0.1.1"
-syslog = "6.1.0"
-users = { version = "0.11.0", default-features = false }
-hostname = { version = "0.4.1", default-features = false }
+# Keep this on 6.x until https://bugzilla.redhat.com/show_bug.cgi?id=2300127 is resolved
+syslog = "6.1.1"
+uzers = { version = "0.12.1", default-features = false }
+# Keep this on 0.3.x until https://bugzilla.redhat.com/show_bug.cgi?id=2272456 is resolved
+hostname = { version = "0.3.1", default-features = false }

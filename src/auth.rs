@@ -1,7 +1,6 @@
 pub use crate::agent::SSHAgent;
 use crate::log::Log;
-use anyhow::{Context, Result};
-use getrandom::getrandom;
+use anyhow::{anyhow, Context, Result};
 use signature::Verifier;
 use ssh_agent_client_rs::Error as SACError;
 use ssh_key::public::KeyData;
@@ -49,7 +48,7 @@ pub fn authenticate(
 
 fn sign_and_verify(key: &PublicKey, agent: &mut impl SSHAgent) -> Result<bool> {
     let mut data: [u8; CHALLENGE_SIZE] = [0_u8; CHALLENGE_SIZE];
-    getrandom(data.as_mut_slice())?;
+    getrandom::fill(data.as_mut_slice()).map_err(|_| anyhow!("Failed to obtain random data"))?;
     let sig = agent.sign(key, data.as_ref())?;
 
     key.key_data().verify(data.as_ref(), &sig)?;
