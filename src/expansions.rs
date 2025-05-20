@@ -27,7 +27,7 @@ impl<'a> UnixEnvironment<'a> {
     }
 }
 
-impl<'a> Environment for UnixEnvironment<'a> {
+impl Environment for UnixEnvironment<'_> {
     fn get_homedir(&self, user: &str) -> Result<Cow<str>> {
         match get_user_by_name(user) {
             Some(user) => Ok(Cow::Owned(user.home_dir().to_string_lossy().to_string())),
