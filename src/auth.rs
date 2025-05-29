@@ -67,7 +67,11 @@ fn keys_from_file(path: &Path) -> Result<HashSet<KeyData>> {
 #[cfg(test)]
 mod test {
     use crate::auth::keys_from_file;
-    use ssh_key::PublicKey;
+    use anyhow::Result;
+    use base64_literal::base64_literal;
+    use signature::Verifier;
+    use ssh_encoding::Decode;
+    use ssh_key::{PublicKey, Signature};
     use std::path::Path;
 
     const KEY_FROM_AUTHORIZED_KEYS: &str = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIObUcR\
@@ -90,5 +94,88 @@ mod test {
 
         let key = PublicKey::from_openssh(ANOTHER_KEY).unwrap();
         assert!(!result.contains(key.key_data()));
+    }
+
+    #[test]
+    fn test_verify_ecdsa_p256() -> Result<()> {
+        verify(
+            "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBK\
+            gm6hassh04KocJTsu4QEMw5GRVeWR/oi9QyCZ04r3tFSYhi7GI+lJBD5WV4LSp9MOJu2WACpWjowZdeAXS\
+            9uw=",
+            &base64_literal!(
+                "AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAABJAAAAIEC3hAQv1h3PZ1xUUGjdwr27LJBDjxM6Z7suD\
+                YAs/UIJAAAAIQC/TxC6dG/eLiv7LhMkR7SctUAc+OMGXqdHCgoMd5x+nQ=="
+            ),
+        )
+    }
+
+    #[test]
+    fn test_verify_ecdsa_p384() -> Result<()> {
+        verify(
+            "ecdsa-sha2-nistp384 AAAAE2VjZHNhLXNoYTItbmlzdHAzODQAAAAIbmlzdHAzODQAAABhBA\
+            ZXH05QZ3EuWZuqOmHSeGk1BwwVWwkFJ+IPwIsxi1sVCerp0Zjb4nPpKTgtN8rAyC4rTdpJnwzDnvVJ8L0j\
+            IABqKuWws6UShmL/W/mfpCV8sKITlEIXhkbtErHQ4StxHg==",
+            &base64_literal!(
+                "AAAAE2VjZHNhLXNoYTItbmlzdHAzODQAAABpAAAAMQCg8/DrnRuxviXd6mnPFB3dtBc/HCWJfmD3h\
+                aj5mxno0q9l36JAYro8OEwKauJ4llcAAAAwDfEr+CVBS5xcey4N4+QiHYr6ch7mavMIaqX/xZHjWuI\
+                GXd1+yrxaxp4zOI0ztbLT"
+            ),
+        )
+    }
+
+    #[test]
+    fn test_verify_ecdsa_p521() -> Result<()> {
+        verify(
+            "ecdsa-sha2-nistp521 AAAAE2VjZHNhLXNoYTItbmlzdHA1MjEAAAAIbmlzdHA1MjEAAACFBA\
+            GWA+tCu8dqObykPnhsDj6riqGmNZnM0Ie/+xpICTRO9Zju8b76b7VNp/8q9QZ7nP91YITxDr4k21TUPZ9A\
+            w1/CvADphX0THL9ADDtq8yo79Vxmw0MfATwarBDWA8YBe9i+KST1X/89tNemL4JR8IbMwXlmz6Vxl0Xt1G\
+            pte0BH5QA4mg==",
+            &base64_literal!(
+                "AAAAE2VjZHNhLXNoYTItbmlzdHA1MjEAAACLAAAAQgCQQ7Pl5ZQoPco1J6dwGR5s8pSnA2tCBd/x8\
+                pWJIMsE5HUI/mLnFmAwi7dedk2KsHqGFVrh7CuIJcxrfGvc6Opr2gAAAEEy9ET09sbYvGqSGsmG87e\
+                lqtIfh1wUjJEffRx96k3CwMw+uihtUMTBnoi2xoxT4VvYGd5ARdo6RDD3MtJ575TFzQ=="
+            ),
+        )
+    }
+
+    #[test]
+    fn test_verify_ed25519() -> Result<()> {
+        verify(
+            "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICn3H5p6CReDJp0cZ+nfzsqQ7jvuQz17pBBeyN\
+            G1syjC",
+            &base64_literal!(
+                "AAAAC3NzaC1lZDI1NTE5AAAAQFaLbFzI92QL1auhVfZE354hfY+HOYcWkAbUqYLXQmqUBCWP4D12i\
+                zSmXQjtfs8hGHPJolPjfjqgqFgj3Aly/wE="
+            ),
+        )
+    }
+
+    #[test]
+    fn test_verify_rsa() -> Result<()> {
+        verify(
+            "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDnehvLShDK8zLaLNEtnZXfeS+U8WgnUp+cwP/6/\
+            MHc9/FJTC4XIOkhUjeD2tQW6ISD51r31cWP5mYl5R4XSoHbgTa7kPOjAilUmojx/KIUu3306XUfi71qTWaCI0\
+            kPz40YWkQiYQXO8krhPkJaZKThlD8T3W637aV5c+uWmI2bhvlAvSdKcLeG59YcRsgpJHixEmBoAYiGDJmv8tH\
+            6M18GFsSuKw51jmAT6yRO+GrWA7uW3UsMWArZZoXTwLbOEw3XALpJrP67qjSlaStoNwClPomwhin6rnDD5z+w\
+            JClVn8m0l29oIINJCuZqwpBz0rKyONo9ptDIGh9bRc6oYSLPj9SzZbLqUZvC2Axw5v4YzAgKD3uSC7z4g5gYI\
+            coqQNqO5g2/dlDm6py5bLC7sVKwWedxpFm1bB/1vmAvstaKbxkRwhcAzrLF5dTYq+1aUk6JGqWGSi8s5zdf2u\
+            j85Bh4a0rDESBnUODQWQFgAmzf1q/uEqNqI/mHJU29dM3Wir8=",
+            &base64_literal!(
+            "AAAADHJzYS1zaGEyLTUxMgAAAYBaehPjXOehIg2wOHa0a+u4g91oyZ8NgX7Mibgnkrdf+FB8KWCWKL8zIACp\
+            AjSnAo0UXQb1etfpROAS8zqTUnONUi3Hs852rOaiNLWQcxhMeszMCbLrY5JaXRWhmm92nsBXNRkgrLvaH1fJ0\
+            d7NlaXYHjI4E/v2jwUVOIb4trI55mJFB2l6jPjmlwRY+wchh6xJ5HmRbY7mJ2ypcsunuxlSj9XUKV2ABVdG+V\
+            WdkXw4SWDx8Eqs4FoF4axrlsPcrhKK2dy1sSWyjN0YfAZPILO7brdsgJURIMGXE1UYJvCEHvgT3MpmBZUD/av\
+            IXG/H1kdaAHa5fmH791msc26DwrVJqlZG8A5hoTrZpiNEZnumPHmLB5E/yQxqlokHtajIkvEttu1jk9CJRizm\
+            Xtw/Fbx+SBAbP+f2Hw27N0lPTH2YaAg8Uic0XkLUyO3FVD/abmR0vv+8nsOEdAHTFQxlK4Y+Vl6nld6Tepe/Z\
+            f4suG0T1HWqHECBscaam+nx3yJzMh8="
+            ),
+        )
+    }
+
+    fn verify(pubkey: &str, mut sig_bytes: &[u8]) -> Result<()> {
+        let key = PublicKey::from_openssh(pubkey)?;
+        let sig = Signature::decode(&mut sig_bytes)?;
+        key.key_data().verify(b"challenge", &sig)?;
+        Ok(())
     }
 }
