@@ -3,6 +3,9 @@ mod args;
 mod auth;
 mod expansions;
 mod log;
+#[cfg(feature = "native-crypto")]
+mod nativecrypto;
+mod verify;
 
 pub use crate::agent::SSHAgent;
 pub use crate::auth::authenticate;
@@ -28,10 +31,10 @@ impl PamHooks for PamSshAgent {
     /// The authentication method called by pam to authenticate the user. This method
     /// will return PAM_SUCCESS if the ssh-agent available through the unix socket path
     /// in the PAM_AUTH_SOCK environment variable is able to correctly sign a random
-    /// message with the private key corresponding to one of the public keys in in
-    /// /etc/security/authorized_key. Otherwise this function returns PAM_AUTH_ERR.
+    /// message with the private key corresponding to one of the public keys in
+    /// /etc/security/authorized_key. Otherwise, this function returns PAM_AUTH_ERR.
     ///
-    /// This method logs diagnostic output to the AUTHPRIV facility.
+    /// This method logs diagnostic output to the AUTHPRIV syslog facility.
     fn sm_authenticate(
         pam_handle: &mut PamHandle,
         args: Vec<&CStr>,
@@ -62,7 +65,7 @@ impl PamHooks for PamSshAgent {
         }
     }
 
-    // `doas` calls pam_setcred(), if this is not defined to succeed it prints
+    // `doas` calls pam_setcred(), if this is not defined to succeed, it prints
     // a fabulous `doas: pam_setcred(?, PAM_REINITIALIZE_CRED): Permission denied: Unknown error -3`
     fn sm_setcred(
         _pam_handle: &mut PamHandle,
