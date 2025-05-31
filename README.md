@@ -78,6 +78,16 @@ path from `pam_ssh_agent_auth`.
 * `%u` the username of the user attempting to authenticate
 * `%U` numeric uid of the user attempting to authenticate
 
+## The `native-crypto` feature
+
+In a [discussion](https://github.com/nresare/pam-ssh-agent/issues/24) about the possibility of having this piece of
+software be integrated into commercial upstream distributions, it was mentioned that such distributions might have
+a requirement that all crypto operations happens with FIPS validated software. Since the native rust crypto
+implementation that this software was using is not yet FIPS validated, but OpenSSL can be made to be, I decided
+to implement the option to use OpenSSL instead of the ssh-key crypto implementation using the `native-crypto` feature.
+
+Unless you are someone that has a mandate to only run FIPS validated crypto implementations, you probably don't want
+this feature enabled.
 
 ## License
 
