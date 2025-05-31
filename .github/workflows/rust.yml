@@ -13,9 +13,15 @@ jobs:
   build:
 
     runs-on: ubuntu-latest
-
+    strategy:
+      matrix:
+        include:
+          - name: No default features
+            flags: --no-default-features
+          - name: Native-crypto feature
+            flags: --no-default-features --features native-crypto
     steps:
-    - uses: actions/cache@v3
+    - uses: actions/cache@v4
       with:
         path: |
           ~/.cargo/bin/
@@ -24,14 +30,14 @@ jobs:
           ~/.cargo/git/db/
           target/
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-    - uses: actions/checkout@v3
-    - name: Install libpam
-      run: sudo apt -y install libpam0g-dev
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
+    - uses: actions/checkout@v4
+    - name: Install libpam, libssl-dev
+      run: sudo apt -y install libpam0g-dev libssl-dev
     - name: Format check
       run: cargo fmt --check
+    - name: Build
+      run: cargo build --verbose
+    - name: Run tests with $${{ matrix.name }}
+      run: cargo test --verbose ${{ matrix.flags }}
     - name: Clippy check
       run: cargo clippy --no-deps
