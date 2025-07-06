@@ -16,17 +16,17 @@ pub struct PrintLog;
 
 impl Log for PrintLog {
     fn debug<S: Display>(&mut self, message: S) -> Result<()> {
-        println!("DEBUG: {}", message);
+        println!("DEBUG: {message}");
         Ok(())
     }
 
     fn info<S: Display>(&mut self, message: S) -> Result<()> {
-        println!("INFO: {}", message);
+        println!("INFO: {message}");
         Ok(())
     }
 
     fn error<S: Display>(&mut self, message: S) -> Result<()> {
-        println!("ERROR: {}", message);
+        println!("ERROR: {message}");
         Ok(())
     }
 }
@@ -47,10 +47,10 @@ impl SyslogLogger {
         }) {
             Ok(log) => SyslogLogger {
                 log,
-                prefix: format!("pam_ssh_agent({}:auth): ", service_name),
+                prefix: format!("pam_ssh_agent({service_name}:auth): "),
                 debug,
             },
-            Err(e) => panic!("Failed to create syslog: {:?}", e),
+            Err(e) => panic!("Failed to create syslog: {e:?}"),
         }
     }
 }

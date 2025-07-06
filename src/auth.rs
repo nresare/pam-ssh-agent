@@ -57,7 +57,7 @@ fn sign_and_verify(key: &PublicKey, agent: &mut impl SSHAgent) -> Result<bool> {
 fn keys_from_file(path: &Path) -> Result<HashSet<KeyData>> {
     Ok(HashSet::from_iter(
         AuthorizedKeys::read_file(path)
-            .context(format!("Failed to read from {:?}", path))?
+            .context(format!("Failed to read from {path:?}"))?
             .into_iter()
             .map(|e| e.public_key().key_data().to_owned()),
     ))
