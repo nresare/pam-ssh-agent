@@ -1,9 +1,9 @@
 Source: pam-ssh-agent
 Section: libs
 Priority: optional
-Maintainer: Noa <noa@resare.com>
+Maintainer: Noa Resare <noa@resare.com>
 Build-Depends: debhelper,
-        libpam0g-dev, cargo, rustfmt, rust-clippy
+        libpam0g-dev, cargo-1.82, rustfmt-1.82, rust-1.82-clippy
 Standards-Version: 4.6.0
 Homepage: https://github.com/nresare/pam-ssh-agent
 Rules-Requires-Root: no
