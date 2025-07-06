@@ -1,3 +1,10 @@
+pam-ssh-agent (0.9.1) UNRELEASED; urgency=medium
+
+  * Fixes the issue where authentication would fail when
+    the ssh agent is configured with ssh certificates
+
+ -- Noa Resare <noa@resare.com>  Sun, 6 Jul 2025 22:19:37 +0000
+
 pam-ssh-agent (0.9.0) UNRELEASED; urgency=medium
 
   * Build fixes etc
