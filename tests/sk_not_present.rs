@@ -1,6 +1,6 @@
 use pam_ssh_agent::{authenticate, PrintLog, SSHAgent};
 use signature::Signer;
-use ssh_agent_client_rs::Error as SACError;
+use ssh_agent_client_rs::{Error as SACError, Identity};
 use ssh_key::{Algorithm, PrivateKey, PublicKey, Signature};
 
 struct DummySshAgent {
@@ -23,21 +23,36 @@ impl DummySshAgent {
 }
 
 impl SSHAgent for DummySshAgent {
-    fn list_identities(&mut self) -> ssh_agent_client_rs::Result<Vec<PublicKey>> {
-        let pubkeys: Vec<PublicKey> = [
-            PublicKey::from_openssh(PUBLIC_SK_KEY).expect("Failed to parse sk pubkey"),
-            PublicKey::from_openssh(PUBLIC_KEY).expect("Failed to parse test pubkey"),
+    fn list_identities(&mut self) -> ssh_agent_client_rs::Result<Vec<Identity>> {
+        let pubkeys: Vec<Identity> = [
+            Identity::PublicKey(
+                PublicKey::from_openssh(PUBLIC_SK_KEY)
+                    .expect("Failed to parse sk pubkey")
+                    .into(),
+            ),
+            Identity::PublicKey(
+                PublicKey::from_openssh(PUBLIC_KEY)
+                    .expect("Failed to parse test pubkey")
+                    .into(),
+            ),
         ]
         .to_vec();
 
         Ok(pubkeys)
     }
 
-    fn sign(&mut self, pubkey: &PublicKey, data: &[u8]) -> ssh_agent_client_rs::Result<Signature> {
-        if pubkey.algorithm() == Algorithm::SkEd25519 {
-            return Err(SACError::RemoteFailure);
+    fn sign(&mut self, pubkey: &Identity, data: &[u8]) -> ssh_agent_client_rs::Result<Signature> {
+        match pubkey {
+            Identity::PublicKey(pubkey) => {
+                if pubkey.algorithm() == Algorithm::SkEd25519 {
+                    return Err(SACError::RemoteFailure);
+                }
+                Ok(self.key.key_data().sign(data.as_ref()))
+            }
+            Identity::Certificate(_) => {
+                return Err(SACError::RemoteFailure);
+            }
         }
-        Ok(self.key.key_data().sign(data.as_ref()))
     }
 }
 
@@ -49,5 +64,5 @@ fn test_sk_not_present() {
     // exercise an 'sk' (hardware) key being authorized, but not present.  Correct behavior is to
     // catch the RemoteFailure SSHAgent error on the 'sk' key, and try the next key, which will
     // succeed.
-    assert!(authenticate(auth_keys, agent, &mut PrintLog {}).unwrap())
+    assert!(authenticate(auth_keys, None, agent, &mut PrintLog {}).unwrap())
 }

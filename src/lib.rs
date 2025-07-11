@@ -12,8 +12,6 @@ pub use crate::auth::authenticate;
 pub use crate::log::PrintLog;
 use pam::constants::{PamFlag, PamResultCode};
 use pam::module::{PamHandle, PamHooks};
-use std::env;
-use std::env::VarError;
 
 use crate::expansions::UnixEnvironment;
 use crate::log::{Log, SyslogLogger};
@@ -79,23 +77,27 @@ impl PamHooks for PamSshAgent {
 fn do_authenticate(log: &mut impl Log, args: &Args) -> Result<()> {
     let path = get_path(args)?;
     log.info(format!(
-        "Authenticating using ssh-agent at '{}' and keys from '{}'",
-        path, args.file
+        "Authenticating using ssh-agent at '{}' and keys from '{}', ca keys from '{}'",
+        path,
+        args.file,
+        args.ca_keys_file.as_deref().unwrap_or("none")
     ))?;
     let ssh_agent_client = Client::connect(Path::new(path.as_str()))?;
-    match authenticate(args.file.as_str(), ssh_agent_client, log)? {
+    match authenticate(
+        args.file.as_str(),
+        args.ca_keys_file.as_deref(),
+        ssh_agent_client,
+        log,
+    )? {
         true => Ok(()),
         false => Err(anyhow!("Agent did not know of any of the allowed keys")),
     }
 }
 
 fn get_path(args: &Args) -> Result<String> {
-    match env::var("SSH_AUTH_SOCK") {
-        Ok(path) => return Ok(path),
-        // It is not an error if this variable is not present, just continue down the function
-        Err(VarError::NotPresent) => {}
-        Err(_) => {
-            return Err(anyhow!("Failed to read environment variable SSH_AUTH_SOCK"));
+    for (key, value) in std::env::vars_os() {
+        if key == "SSH_AUTH_SOCK" {
+            return Ok(value.to_string_lossy().to_string());
         }
     }
     match &args.default_ssh_auth_sock {

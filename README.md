@@ -38,8 +38,6 @@ timely manner. A secondary benefit is that it is easier to support a wide range 
   You will need to add a `permit` line in `/etc/doas.conf` for it to work. This is not strictly
   necessary but since this is still experimental 
 * Replace the `common-auth` include in `/etc/pam.d/sudo` with `auth  required   pam_ssh_agent.so`
-* Configure `sudo` to not drop the `SSH_AUTH_SOCK` environment variable by
-  adding `Defaults env_keep += "SSH_AUTH_SOCK"` to the file `/etc/sudoers.d/ssh_agent_env`
 * Add the public key that your ssh-agent knows about to `/etc/security/authorized_keys`
 * If you are using a systemd based linux system, you can observe the output of this crate using 
   `journalctl -f --facility authpriv`
@@ -54,6 +52,8 @@ configuration file in `/etc/pam.d`. pam_ssh_agent currently understands the foll
   default `/etc/security/authorized_keys`. This path is subject to the variable expansions mentioned below
 * `default_ssh_auth_sock=/path/to/ssh_agent_unix_socket` the path to use if the `SSH_AUTH_SOCKET` is not
   set
+* `ca_keys_file=/file/with/ssh_ca_keys` This points to the file that contains the public keys of the 
+  that can be used to validate SSH user certificates present in the agent.
   
 ## Variable expansions
 

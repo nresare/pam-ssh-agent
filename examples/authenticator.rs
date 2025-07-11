@@ -9,8 +9,14 @@ fn main() -> Result<()> {
     let client = Client::connect(Path::new(path.as_str()))?;
 
     let authorized_keys_path = env::args().nth(1).expect("argument missing");
+    let ca_authorized_keys_path = env::args().nth(2);
 
-    let result = authenticate(authorized_keys_path.as_str(), client, &mut PrintLog {})?;
+    let result = authenticate(
+        authorized_keys_path.as_str(),
+        ca_authorized_keys_path.as_deref(),
+        client,
+        &mut PrintLog {},
+    )?;
 
     println!("Status of authentication is: {}", result);
     Ok(())

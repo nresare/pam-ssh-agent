@@ -11,6 +11,7 @@ const DEFAULT_AUTHORIZED_KEYS_PATH: &str = "/etc/security/authorized_keys";
 pub struct Args {
     pub debug: bool,
     pub file: String,
+    pub ca_keys_file: Option<String>,
     pub default_ssh_auth_sock: Option<String>,
 }
 
@@ -19,6 +20,7 @@ impl Default for Args {
         Args {
             debug: false,
             file: String::from(DEFAULT_AUTHORIZED_KEYS_PATH),
+            ca_keys_file: None,
             default_ssh_auth_sock: None,
         }
     }
@@ -29,6 +31,7 @@ impl Args {
     pub fn parse(args: Vec<&CStr>, env: Option<&dyn Environment>) -> Result<Self> {
         let mut debug = false;
         let mut file: String = String::from(DEFAULT_AUTHORIZED_KEYS_PATH);
+        let mut ca_keys_file: Option<String> = None;
         let mut default_ssh_auth_sock = None;
 
         for arg in args
@@ -51,6 +54,7 @@ impl Args {
                     let (key, value) = (parts[0], parts[1]);
                     match key {
                         "file" => file = value.to_string(),
+                        "ca_keys_file" => ca_keys_file = Some(value.to_string()),
                         "default_ssh_auth_sock" => default_ssh_auth_sock = Some(value.to_string()),
                         _ => return Err(anyhow!("Unknown parameter key '{key}'")),
                     }
@@ -60,6 +64,7 @@ impl Args {
         Ok(Args {
             debug,
             file,
+            ca_keys_file,
             default_ssh_auth_sock,
         })
     }
@@ -121,12 +126,17 @@ mod test {
 
         let expected = Args {
             default_ssh_auth_sock: Some("/var/run/ssh_agent.sock".into()),
+            ca_keys_file: Some("/etc/security/ca_keys".into()),
             ..Default::default()
         };
         assert_eq!(
             expected,
             Args::parse(
-                args!("default_ssh_auth_sock=/var/run/ssh_agent.sock").refs(),
+                args!(
+                    "default_ssh_auth_sock=/var/run/ssh_agent.sock",
+                    "ca_keys_file=/etc/security/ca_keys"
+                )
+                .refs(),
                 None
             )?
         );
