@@ -12,7 +12,7 @@ clean:
 
 
 check:
-	cargo-$(CARGO_VERSION) fmt --check
+	PATH=/usr/lib/rust-$(CARGO_VERSION)/bin:$(PATH) cargo-$(CARGO_VERSION) fmt --check
 	# it seems the packaging of rust-1.82 and friends is a bit funky
 	# if the PATH is not set when invoking clippy and test, the old
 	# version will be used
