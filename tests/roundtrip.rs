@@ -18,16 +18,24 @@ impl DummySshAgent {
 
 impl SSHAgent for DummySshAgent {
     fn list_identities(&mut self) -> ssh_agent_client_rs::Result<Vec<Identity>> {
-        let identity = Identity::PublicKey(PublicKey::from_openssh(include_str!(
-            "data/id_ed25519.pub"
-        ))?)
+        let identity = Identity::PublicKey(Box::new(std::borrow::Cow::Owned(
+            PublicKey::from_openssh(include_str!("data/id_ed25519.pub"))?,
+        )))
         .into();
 
         Ok(vec![identity])
     }
 
-    fn sign(&mut self, _: &Identity, data: &[u8]) -> ssh_agent_client_rs::Result<Signature> {
-        Ok(self.key.key_data().sign(data.as_ref()))
+    fn sign<'a>(
+        &mut self,
+        key: impl Into<Identity<'a>>,
+        data: &[u8],
+    ) -> ssh_agent_client_rs::Result<Signature> {
+        let pubkey: Identity<'_> = key.into();
+        match &pubkey {
+            Identity::PublicKey(_) => Ok(self.key.key_data().sign(data.as_ref())),
+            Identity::Certificate(_) => Ok(self.key.key_data().sign(data.as_ref())),
+        }
     }
 }
 

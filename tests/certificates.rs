@@ -27,18 +27,21 @@ impl DummySshAgent {
 
 impl SSHAgent for DummySshAgent {
     fn list_identities(&mut self) -> ssh_agent_client_rs::Result<Vec<Identity>> {
-        let pubkeys: Vec<Identity> = [Identity::Certificate(
-            Certificate::from_openssh(PUBLIC_CERTIFICATE)
-                .expect("Failed to parse SSH certificate")
-                .into(),
-        )]
-        .to_vec();
+        let pubkeys: Identity = Identity::Certificate(Box::new(std::borrow::Cow::Owned(
+            Certificate::from_openssh(PUBLIC_CERTIFICATE).expect("Failed to parse SSH certificate"),
+        )))
+        .into();
 
-        Ok(pubkeys)
+        Ok(vec![pubkeys])
     }
 
-    fn sign(&mut self, pubkey: &Identity, data: &[u8]) -> ssh_agent_client_rs::Result<Signature> {
-        match pubkey {
+    fn sign<'a>(
+        &mut self,
+        key: impl Into<Identity<'a>>,
+        data: &[u8],
+    ) -> ssh_agent_client_rs::Result<Signature> {
+        let pubkey: Identity<'_> = key.into();
+        match &pubkey {
             Identity::PublicKey(_) => Ok(self.key.key_data().sign(data.as_ref())),
             Identity::Certificate(_) => Ok(self.key.key_data().sign(data.as_ref())),
         }

@@ -34,43 +34,40 @@ pub fn authenticate(
     if !ca_keys_file_path.is_empty() {
         ca_keys = keys_from_file(Path::new(ca_keys_file_path))?;
     }
+    // Doing a dance here in order to avoid issues with borrowing `agent` later on
     let owned_identities: Vec<Identity> = {
-        let raw = agent.list_identities()?;   // borrows agent…
+        let raw = agent.list_identities()?; // borrows agent…
         raw.into_iter()
-           .map(|id| match id {
-               Identity::PublicKey(pk) => {
-                   // serialize out the public‐key bytes and its comment
-                   let data = pk.key_data();
-                   let comment = pk.comment().to_owned();
-                   // re‐parse into a brand‐new PublicKey that owns its buffer
-                   let pk2 = PublicKey::new(data.clone(), comment);
-                   Identity::PublicKey(Box::new(std::borrow::Cow::Owned(pk2)))
-               }
-               Identity::Certificate(cert) => {
-                   // certificates similarly need to be re-parsed from their raw bytes
-                   let cert_blob = cert.to_bytes()
-                       .expect("Failed to serialize certificate to bytes");
-                   let comment   = cert.comment().to_owned();
-                   // Assuming the API has a `Certificate::parse` (or similar):
-                   let cert2 = Certificate::from_bytes(&cert_blob)
-                       .expect("Failed to parse certificate from bytes");
-                   let cert_serialized = Certificate::to_openssh(&cert2)
-                       .expect("Failed to serialize certificate");
-                   let openssh_string = format!(
-                       "{} {}",
-                       cert_serialized,
-                       comment
-                   );
-                   let cert_with_comment = Certificate::from_openssh(&openssh_string)
-                       .expect("Failed to parse certificate from OpenSSH format");
-                   Identity::Certificate(Box::new(std::borrow::Cow::Owned(cert_with_comment)))
-               }
-           })
-           .collect()
+            .map(|id| match id {
+                Identity::PublicKey(pk) => {
+                    // serialize out the public‐key bytes and its comment
+                    let data = pk.key_data();
+                    let comment = pk.comment().to_owned();
+                    // re‐parse into a brand‐new PublicKey that owns its buffer
+                    let pk2 = PublicKey::new(data.clone(), comment);
+                    Identity::PublicKey(Box::new(std::borrow::Cow::Owned(pk2)))
+                }
+                Identity::Certificate(cert) => {
+                    // certificates similarly need to be re-parsed from their raw bytes
+                    let cert_blob = cert
+                        .to_bytes()
+                        .expect("Failed to serialize certificate to bytes");
+                    let comment = cert.comment().to_owned();
+                    let cert2 = Certificate::from_bytes(&cert_blob)
+                        .expect("Failed to parse certificate from bytes");
+                    let cert_serialized =
+                        Certificate::to_openssh(&cert2).expect("Failed to serialize certificate");
+                    let openssh_string = format!("{} {}", cert_serialized, comment);
+                    let cert_with_comment = Certificate::from_openssh(&openssh_string)
+                        .expect("Failed to parse certificate from OpenSSH format");
+                    Identity::Certificate(Box::new(std::borrow::Cow::Owned(cert_with_comment)))
+                }
+            })
+            .collect()
     };
     let mut matching_identities: Vec<Identity> = Vec::new();
 
-    // First loop: Match identities
+    // Collect identities that match the keys from the authorized_keys file
     for key in &owned_identities {
         match key {
             Identity::PublicKey(key) => {
@@ -92,7 +89,13 @@ pub fn authenticate(
                             ca_key.comment(),
                             ca_key.fingerprint(Default::default())
                         ))?;
-                        match cert.validate([&ca_key.fingerprint(Default::default())]) {
+                        match cert.validate_at(
+                            std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .expect("Time went backwards")
+                                .as_secs(),
+                            [&ca_key.fingerprint(Default::default())],
+                        ) {
                             Ok(_) => matching_identities.push(Identity::Certificate(cert.clone())),
                             Err(e) => {
                                 log.error(format!("Certificate validation failed: {}", e))?;
@@ -105,12 +108,13 @@ pub fn authenticate(
         }
     }
 
+    // Attempt to sign and verify with each matching identity
     for key in matching_identities {
         match sign_and_verify(&key, &mut agent) {
-            Ok(true) => return Ok(true),              // success: bail out
+            Ok(true) => return Ok(true), // success: bail out
             Ok(false) => {
                 log.debug("signature failed; trying next")?;
-                continue;                             // try the next identity
+                continue; // try the next identity
             }
             Err(e) => {
                 if let Some(SACError::RemoteFailure) = e.downcast_ref::<SACError>() {

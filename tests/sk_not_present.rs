@@ -24,24 +24,25 @@ impl DummySshAgent {
 
 impl SSHAgent for DummySshAgent {
     fn list_identities(&mut self) -> ssh_agent_client_rs::Result<Vec<Identity>> {
-        let pubkeys: Vec<Identity> = [
-            Identity::PublicKey(
-                PublicKey::from_openssh(PUBLIC_SK_KEY)
-                    .expect("Failed to parse sk pubkey")
-                    .into(),
-            ),
-            Identity::PublicKey(
-                PublicKey::from_openssh(PUBLIC_KEY)
-                    .expect("Failed to parse test pubkey")
-                    .into(),
-            ),
+        let pubkeys = [
+            Identity::PublicKey(Box::new(std::borrow::Cow::Owned(PublicKey::from_openssh(
+                PUBLIC_SK_KEY,
+            )?))),
+            Identity::PublicKey(Box::new(std::borrow::Cow::Owned(PublicKey::from_openssh(
+                PUBLIC_KEY,
+            )?))),
         ]
         .to_vec();
 
         Ok(pubkeys)
     }
 
-    fn sign(&mut self, pubkey: &Identity, data: &[u8]) -> ssh_agent_client_rs::Result<Signature> {
+    fn sign<'a>(
+        &mut self,
+        key: impl Into<Identity<'a>>,
+        data: &[u8],
+    ) -> ssh_agent_client_rs::Result<Signature> {
+        let pubkey: Identity<'_> = key.into();
         match pubkey {
             Identity::PublicKey(pubkey) => {
                 if pubkey.algorithm() == Algorithm::SkEd25519 {
