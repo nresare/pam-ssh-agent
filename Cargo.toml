@@ -14,8 +14,7 @@ name = "pam_ssh_agent"
 crate-type = ["lib", "cdylib"]
 
 [dependencies]
-# Pointing to main branch until 1.0.2 is released
-ssh-agent-client-rs = { git = "https://github.com/nresare/ssh-agent-client-rs.git" }
+ssh-agent-client-rs = "1.1.0"
 getrandom = "0.3.3"
 ssh-key = { version = "0.6.7", features = ["crypto"] }
 signature = "2.2.0"

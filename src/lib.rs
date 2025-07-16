@@ -12,6 +12,8 @@ pub use crate::auth::authenticate;
 pub use crate::log::PrintLog;
 use pam::constants::{PamFlag, PamResultCode};
 use pam::module::{PamHandle, PamHooks};
+use std::env;
+use std::env::VarError;
 
 use crate::expansions::UnixEnvironment;
 use crate::log::{Log, SyslogLogger};
@@ -95,9 +97,12 @@ fn do_authenticate(log: &mut impl Log, args: &Args) -> Result<()> {
 }
 
 fn get_path(args: &Args) -> Result<String> {
-    for (key, value) in std::env::vars_os() {
-        if key == "SSH_AUTH_SOCK" {
-            return Ok(value.to_string_lossy().to_string());
+    match env::var("SSH_AUTH_SOCK") {
+        Ok(path) => return Ok(path),
+        // It is not an error if this variable is not present, just continue down the function
+        Err(VarError::NotPresent) => {}
+        Err(_) => {
+            return Err(anyhow!("Failed to read environment variable SSH_AUTH_SOCK"));
         }
     }
     match &args.default_ssh_auth_sock {

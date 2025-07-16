@@ -2,7 +2,7 @@ use anyhow::Result;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use signature::SignatureEncoding;
-use ssh_agent_client_rs::{Client, Identity};
+use ssh_agent_client_rs::Client;
 use ssh_key::PublicKey;
 use std::env;
 use std::fs::read;
@@ -22,9 +22,8 @@ fn main() -> Result<()> {
     let path = env::args().nth(1).expect("argument KEY missing");
     let data = read(Path::new(&path))?;
     let pubkey = PublicKey::from_openssh(&String::from_utf8_lossy(&data))?;
-    let identity = Identity::PublicKey(pubkey.into());
 
-    let signature = client.sign_with_identity(&identity, b"challenge")?;
+    let signature = client.sign(&pubkey, b"challenge")?;
     let signature = signature.to_bytes();
     println!("Number of signature bytes: {}", signature.len());
     println!("Signature: {}", BASE64_STANDARD.encode(&signature));

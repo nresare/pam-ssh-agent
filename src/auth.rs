@@ -5,7 +5,7 @@ use anyhow::{anyhow, Context, Result};
 use ssh_agent_client_rs::Error as SACError;
 use ssh_agent_client_rs::Identity;
 use ssh_key::AuthorizedKeys;
-use ssh_key::PublicKey;
+use ssh_key::{Certificate, PublicKey};
 use std::collections::HashSet;
 use std::path::Path;
 
@@ -34,65 +34,90 @@ pub fn authenticate(
     if !ca_keys_file_path.is_empty() {
         ca_keys = keys_from_file(Path::new(ca_keys_file_path))?;
     }
+    let owned_identities: Vec<Identity> = {
+        let raw = agent.list_identities()?;   // borrows agent…
+        raw.into_iter()
+           .map(|id| match id {
+               Identity::PublicKey(pk) => {
+                   // serialize out the public‐key bytes and its comment
+                   let data = pk.key_data();
+                   let comment = pk.comment().to_owned();
+                   // re‐parse into a brand‐new PublicKey that owns its buffer
+                   let pk2 = PublicKey::new(data.clone(), comment);
+                   Identity::PublicKey(Box::new(std::borrow::Cow::Owned(pk2)))
+               }
+               Identity::Certificate(cert) => {
+                   // certificates similarly need to be re-parsed from their raw bytes
+                   let cert_blob = cert.to_bytes()
+                       .expect("Failed to serialize certificate to bytes");
+                   let comment   = cert.comment().to_owned();
+                   // Assuming the API has a `Certificate::parse` (or similar):
+                   let cert2 = Certificate::from_bytes(&cert_blob)
+                       .expect("Failed to parse certificate from bytes");
+                   let cert_serialized = Certificate::to_openssh(&cert2)
+                       .expect("Failed to serialize certificate");
+                   let openssh_string = format!(
+                       "{} {}",
+                       cert_serialized,
+                       comment
+                   );
+                   let cert_with_comment = Certificate::from_openssh(&openssh_string)
+                       .expect("Failed to parse certificate from OpenSSH format");
+                   Identity::Certificate(Box::new(std::borrow::Cow::Owned(cert_with_comment)))
+               }
+           })
+           .collect()
+    };
+    let mut matching_identities: Vec<Identity> = Vec::new();
 
-    for key in agent.list_identities()? {
-        // A key can be a pubkey identity or a certificate identity.
-        // Adapt the logic to handle both cases.
+    // First loop: Match identities
+    for key in &owned_identities {
         match key {
             Identity::PublicKey(key) => {
-                if keys.contains(&key) {
+                if keys.contains(key) {
                     log.debug(format!(
                         "found a matching key: {}, comment: {}",
                         key.fingerprint(Default::default()),
                         key.comment()
                     ))?;
-                    // Allow sign_and_verify() to return RemoteFailure (key not loaded / present),
-                    // and try the next configured key
-                    match sign_and_verify(&Identity::PublicKey(key), &mut agent) {
-                        Ok(res) => return Ok(res),
-                        Err(e) => {
-                            if let Some(SACError::RemoteFailure) = e.downcast_ref::<SACError>() {
-                                log.debug("SSHAgent: RemoteFailure; trying next key")?;
-                                continue;
-                            } else {
-                                return Err(e);
-                            }
-                        }
-                    }
+                    matching_identities.push(Identity::PublicKey(key.clone()));
                 }
             }
-            Identity::Certificate(key) => {
-                for ca_key in ca_keys.iter() {
-                    if ca_key.key_data() == key.signature_key() {
+            Identity::Certificate(cert) => {
+                let cert_signing_key = cert.signature_key();
+                for ca_key in &ca_keys {
+                    if ca_key.key_data() == cert_signing_key {
                         log.debug(format!(
                             "found a matching certificate signed by trusted ca: {}, ca_key: {}",
                             ca_key.comment(),
                             ca_key.fingerprint(Default::default())
                         ))?;
-                        // Validate the certificate against the CA key
-                        match key.validate([&ca_key.fingerprint(Default::default())]) {
-                            Ok(_) => {
-                                log.debug("Certificate is valid")?;
-                            }
+                        match cert.validate([&ca_key.fingerprint(Default::default())]) {
+                            Ok(_) => matching_identities.push(Identity::Certificate(cert.clone())),
                             Err(e) => {
                                 log.error(format!("Certificate validation failed: {}", e))?;
                                 return Err(anyhow!("Certificate validation failed: {}", e));
                             }
                         }
-                        // Perform the signature challenge/verification
-                        match sign_and_verify(&Identity::Certificate(key.clone()), &mut agent) {
-                            Ok(res) => return Ok(res),
-                            Err(e) => {
-                                if let Some(SACError::RemoteFailure) = e.downcast_ref::<SACError>()
-                                {
-                                    log.debug("SSHAgent: RemoteFailure; trying next key")?;
-                                    continue;
-                                } else {
-                                    return Err(e);
-                                }
-                            }
-                        }
                     }
+                }
+            }
+        }
+    }
+
+    for key in matching_identities {
+        match sign_and_verify(&key, &mut agent) {
+            Ok(true) => return Ok(true),              // success: bail out
+            Ok(false) => {
+                log.debug("signature failed; trying next")?;
+                continue;                             // try the next identity
+            }
+            Err(e) => {
+                if let Some(SACError::RemoteFailure) = e.downcast_ref::<SACError>() {
+                    log.debug("SSHAgent: RemoteFailure; trying next key")?;
+                    continue;
+                } else {
+                    return Err(e);
                 }
             }
         }
@@ -103,7 +128,7 @@ pub fn authenticate(
 fn sign_and_verify(identity: &Identity, agent: &mut impl SSHAgent) -> Result<bool> {
     let mut data: [u8; CHALLENGE_SIZE] = [0_u8; CHALLENGE_SIZE];
     getrandom::fill(data.as_mut_slice()).map_err(|_| anyhow!("Failed to obtain random data"))?;
-    let sig = agent.sign(identity, data.as_ref())?;
+    let sig = agent.sign(identity.clone(), data.as_ref())?;
     match identity {
         Identity::PublicKey(key) => {
             verify(key.key_data(), data.as_ref(), &sig)?;
