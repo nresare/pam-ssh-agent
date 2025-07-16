@@ -5,7 +5,7 @@ use anyhow::{anyhow, Context, Result};
 use ssh_agent_client_rs::Error as SACError;
 use ssh_agent_client_rs::Identity;
 use ssh_key::AuthorizedKeys;
-use ssh_key::{Certificate, PublicKey};
+use ssh_key::{Certificate, HashAlg, PublicKey};
 use std::collections::HashSet;
 use std::path::Path;
 
@@ -30,9 +30,16 @@ pub fn authenticate(
     let keys = keys_from_file(Path::new(keys_file_path))?;
     // If no CA keys file is provided, then initialize ca_keys as an empty set.
     let ca_keys_file_path = ca_keys_file_path.unwrap_or("");
-    let mut ca_keys = HashSet::new();
+    let mut ca_keys: Vec<ssh_key::Fingerprint> = Vec::new();
     if !ca_keys_file_path.is_empty() {
-        ca_keys = keys_from_file(Path::new(ca_keys_file_path))?;
+        ca_keys = keys_from_file(Path::new(ca_keys_file_path))
+            .context(format!(
+                "Failed to read CA keys from {:?}",
+                ca_keys_file_path
+            ))?
+            .iter()
+            .map(|key| key.fingerprint(HashAlg::Sha256))
+            .collect();
     }
     // Doing a dance here in order to avoid issues with borrowing `agent` later on
     let owned_identities: Vec<Identity> = {
@@ -81,27 +88,17 @@ pub fn authenticate(
                 }
             }
             Identity::Certificate(cert) => {
-                let cert_signing_key = cert.signature_key();
-                for ca_key in &ca_keys {
-                    if ca_key.key_data() == cert_signing_key {
-                        log.debug(format!(
-                            "found a matching certificate signed by trusted ca: {}, ca_key: {}",
-                            ca_key.comment(),
-                            ca_key.fingerprint(Default::default())
-                        ))?;
-                        match cert.validate_at(
-                            std::time::SystemTime::now()
-                                .duration_since(std::time::UNIX_EPOCH)
-                                .expect("Time went backwards")
-                                .as_secs(),
-                            [&ca_key.fingerprint(Default::default())],
-                        ) {
-                            Ok(_) => matching_identities.push(Identity::Certificate(cert.clone())),
-                            Err(e) => {
-                                log.error(format!("Certificate validation failed: {}", e))?;
-                                return Err(anyhow!("Certificate validation failed: {}", e));
-                            }
-                        }
+                match cert.validate_at(
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .expect("Time went backwards")
+                        .as_secs(),
+                    ca_keys.as_slice(),
+                ) {
+                    Ok(_) => matching_identities.push(Identity::Certificate(cert.clone())),
+                    Err(_) => {
+                        log.error(format!("Certificate validation failed"))?;
+                        return Err(anyhow!("Certificate validation failed"));
                     }
                 }
             }

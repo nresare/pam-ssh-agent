@@ -53,7 +53,12 @@ fn test_certificates_no_ca_keys() {
     let agent = DummySshAgent::new();
     let auth_keys = "/dev/null";
 
-    assert!(!authenticate(auth_keys, None, agent, &mut PrintLog {}).unwrap())
+    let err = authenticate(auth_keys, None, agent, &mut PrintLog {}).unwrap_err();
+    assert!(
+        err.to_string().contains("Certificate validation failed"),
+        "got `{}` but expected a certificate‐validation failure",
+        err.to_string(),
+    );
 }
 
 #[test]
@@ -62,7 +67,13 @@ fn test_certificates_invalid_ca_keys() {
     // We will use the public key as a CA key, which is invalid.
     let invalid_ca_keys = PUBLIC_KEY_PATH;
 
-    assert!(!authenticate("/dev/null", Some(invalid_ca_keys), agent, &mut PrintLog {}).unwrap())
+    let err =
+        authenticate("/dev/null", Some(invalid_ca_keys), agent, &mut PrintLog {}).unwrap_err();
+    assert!(
+        err.to_string().contains("Certificate validation failed"),
+        "got `{}` but expected a certificate‐validation failure",
+        err.to_string(),
+    );
 }
 
 #[test]
