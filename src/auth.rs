@@ -2,11 +2,12 @@ pub use crate::agent::SSHAgent;
 use crate::log::Log;
 use crate::verify::verify;
 use anyhow::{anyhow, Context, Result};
-use ssh_agent_client_rs::Error as SACError;
+use ssh_agent_client_rs::{Error as SACError, Identity};
 use ssh_key::public::KeyData;
-use ssh_key::{AuthorizedKeys, PublicKey};
+use ssh_key::AuthorizedKeys;
 use std::collections::HashSet;
 use std::path::Path;
+use Identity::{Certificate, PublicKey};
 
 const CHALLENGE_SIZE: usize = 32;
 
@@ -22,15 +23,11 @@ pub fn authenticate(
     log: &mut impl Log,
 ) -> Result<bool> {
     let keys = keys_from_file(Path::new(keys_file_path))?;
-    for key in agent.list_identities()? {
-        if keys.contains(key.key_data()) {
-            log.debug(format!(
-                "found a matching key: {}",
-                key.fingerprint(Default::default())
-            ))?;
+    for identity in agent.list_identities()? {
+        if filter_identities(&identity, &keys, log)? {
             // Allow sign_and_verify() to return RemoteFailure (key not loaded / present),
             // and try the next configured key
-            match sign_and_verify(&key, &mut agent) {
+            match sign_and_verify(identity, &mut agent) {
                 Ok(res) => return Ok(res),
                 Err(e) => {
                     if let Some(SACError::RemoteFailure) = e.downcast_ref::<SACError>() {
@@ -46,11 +43,31 @@ pub fn authenticate(
     Ok(false)
 }
 
-fn sign_and_verify(key: &PublicKey, agent: &mut impl SSHAgent) -> Result<bool> {
+fn filter_identities(
+    identity: &Identity,
+    keys: &HashSet<KeyData>,
+    log: &mut impl Log,
+) -> Result<bool> {
+    if let PublicKey(key) = identity {
+        if keys.contains(key.key_data()) {
+            log.debug(format!(
+                "found a matching key: {}",
+                key.fingerprint(Default::default())
+            ))?;
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn sign_and_verify(identity: Identity<'static>, agent: &mut impl SSHAgent) -> Result<bool> {
     let mut data: [u8; CHALLENGE_SIZE] = [0_u8; CHALLENGE_SIZE];
     getrandom::fill(data.as_mut_slice()).map_err(|_| anyhow!("Failed to obtain random data"))?;
-    let sig = agent.sign(key, data.as_ref())?;
-    verify(key.key_data(), data.as_ref(), &sig)?;
+    let sig = agent.sign(identity.clone(), data.as_ref())?;
+    match identity {
+        PublicKey(key) => verify(key.key_data(), data.as_ref(), &sig)?,
+        Certificate(_) => return Err(anyhow!("Unsupported identity type")),
+    };
     Ok(true)
 }
 

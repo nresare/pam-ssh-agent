@@ -1,6 +1,6 @@
 use pam_ssh_agent::{authenticate, PrintLog, SSHAgent};
 use signature::Signer;
-use ssh_agent_client_rs::Error as SACError;
+use ssh_agent_client_rs::{Error as SACError, Identity};
 use ssh_key::{Algorithm, PrivateKey, PublicKey, Signature};
 
 struct DummySshAgent {
@@ -23,21 +23,32 @@ impl DummySshAgent {
 }
 
 impl SSHAgent for DummySshAgent {
-    fn list_identities(&mut self) -> ssh_agent_client_rs::Result<Vec<PublicKey>> {
-        let pubkeys: Vec<PublicKey> = [
-            PublicKey::from_openssh(PUBLIC_SK_KEY).expect("Failed to parse sk pubkey"),
-            PublicKey::from_openssh(PUBLIC_KEY).expect("Failed to parse test pubkey"),
+    fn list_identities(&mut self) -> ssh_agent_client_rs::Result<Vec<Identity<'static>>> {
+        let pubkeys: Vec<Identity> = [
+            PublicKey::from_openssh(PUBLIC_SK_KEY)
+                .expect("Failed to parse sk pubkey")
+                .into(),
+            PublicKey::from_openssh(PUBLIC_KEY)
+                .expect("Failed to parse test pubkey")
+                .into(),
         ]
         .to_vec();
 
         Ok(pubkeys)
     }
 
-    fn sign(&mut self, pubkey: &PublicKey, data: &[u8]) -> ssh_agent_client_rs::Result<Signature> {
-        if pubkey.algorithm() == Algorithm::SkEd25519 {
-            return Err(SACError::RemoteFailure);
+    fn sign<'a>(
+        &mut self,
+        pubkey: impl Into<Identity<'a>>,
+        data: &[u8],
+    ) -> ssh_agent_client_rs::Result<Signature> {
+        if let Identity::PublicKey(pubkey) = pubkey.into() {
+            if pubkey.algorithm() == Algorithm::SkEd25519 {
+                return Err(SACError::RemoteFailure);
+            }
+            return Ok(self.key.key_data().sign(data.as_ref()));
         }
-        Ok(self.key.key_data().sign(data.as_ref()))
+        panic!()
     }
 }
 

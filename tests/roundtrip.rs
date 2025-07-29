@@ -1,5 +1,6 @@
 use pam_ssh_agent::{authenticate, PrintLog, SSHAgent};
 use signature::Signer;
+use ssh_agent_client_rs::Identity;
 use ssh_key::{PrivateKey, PublicKey, Signature};
 
 struct DummySshAgent {
@@ -16,13 +17,18 @@ impl DummySshAgent {
 }
 
 impl SSHAgent for DummySshAgent {
-    fn list_identities(&mut self) -> ssh_agent_client_rs::Result<Vec<PublicKey>> {
+    fn list_identities(&mut self) -> ssh_agent_client_rs::Result<Vec<Identity<'static>>> {
         Ok(vec![PublicKey::from_openssh(include_str!(
             "data/id_ed25519.pub"
-        ))?])
+        ))?
+        .into()])
     }
 
-    fn sign(&mut self, _: &PublicKey, data: &[u8]) -> ssh_agent_client_rs::Result<Signature> {
+    fn sign<'a>(
+        &mut self,
+        _key: impl Into<Identity<'a>>,
+        data: &[u8],
+    ) -> ssh_agent_client_rs::Result<Signature> {
         Ok(self.key.key_data().sign(data.as_ref()))
     }
 }
