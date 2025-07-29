@@ -14,7 +14,7 @@ name = "pam_ssh_agent"
 crate-type = ["lib", "cdylib"]
 
 [dependencies]
-ssh-agent-client-rs = "1.0.1"
+ssh-agent-client-rs = "1.1.1"
 getrandom = "0.3.3"
 ssh-key = { version = "0.6.7", features = ["crypto"] }
 signature = "2.2.0"
