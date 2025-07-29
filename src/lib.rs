@@ -19,7 +19,7 @@ use crate::logging::init_logging;
 use anyhow::{anyhow, Result};
 use args::Args;
 use log::{error, info};
-use pam::items::Service;
+use pam::items::{Service, User};
 use ssh_agent_client_rs::Client;
 use std::ffi::CStr;
 use std::path::Path;
@@ -68,18 +68,23 @@ fn run(args: Vec<&CStr>, pam_handle: &PamHandle) -> Result<()> {
     if args.debug {
         log::set_max_level(log::LevelFilter::Debug);
     }
-    do_authenticate(&args)?;
+    do_authenticate(&args, pam_handle)?;
     Ok(())
 }
 
-fn do_authenticate(args: &Args) -> Result<()> {
+fn do_authenticate(args: &Args, handle: &PamHandle) -> Result<()> {
     let path = get_path(args)?;
     info!(
         "Authenticating using ssh-agent at '{}' and keys from '{}'",
         path, args.file
     );
     let ssh_agent_client = Client::connect(Path::new(path.as_str()))?;
-    match authenticate(args.file.as_str(), ssh_agent_client)? {
+    match authenticate(
+        args.file.as_str(),
+        args.ca_keys_file.as_deref(),
+        ssh_agent_client,
+        &get_user(handle)?,
+    )? {
         true => Ok(()),
         false => Err(anyhow!("Agent did not know of any of the allowed keys")),
     }
@@ -110,4 +115,14 @@ fn get_service(pam_handle: &PamHandle) -> String {
         _ => return "unknown".into(),
     };
     String::from_utf8_lossy(service.0.to_bytes()).to_string()
+}
+
+/// Fetch the name of the current service, i.e. the software that uses pam for authentication
+/// using the PamHandle::get_item() method.
+fn get_user(pam_handle: &PamHandle) -> Result<String> {
+    let service = match pam_handle.get_item::<User>() {
+        Ok(Some(user)) => user,
+        _ => return Err(anyhow!("Failed to get user")),
+    };
+    Ok(String::from_utf8_lossy(service.0.to_bytes()).to_string())
 }

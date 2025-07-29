@@ -43,5 +43,5 @@ fn test_roundtrip() {
     env_logger::builder()
         .filter_level(log::LevelFilter::Info)
         .init();
-    assert!(authenticate(auth_keys, agent).unwrap())
+    assert!(authenticate(auth_keys, None, agent, "").unwrap())
 }
