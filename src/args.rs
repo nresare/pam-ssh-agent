@@ -12,6 +12,7 @@ pub struct Args {
     pub debug: bool,
     pub file: String,
     pub default_ssh_auth_sock: Option<String>,
+    pub ca_keys_file: Option<String>,
 }
 
 impl Default for Args {
@@ -20,6 +21,7 @@ impl Default for Args {
             debug: false,
             file: String::from(DEFAULT_AUTHORIZED_KEYS_PATH),
             default_ssh_auth_sock: None,
+            ca_keys_file: None,
         }
     }
 }
@@ -30,6 +32,7 @@ impl Args {
         let mut debug = false;
         let mut file: String = String::from(DEFAULT_AUTHORIZED_KEYS_PATH);
         let mut default_ssh_auth_sock = None;
+        let mut ca_keys_file: Option<String> = None;
 
         for arg in args
             .iter()
@@ -52,6 +55,7 @@ impl Args {
                     match key {
                         "file" => file = value.to_string(),
                         "default_ssh_auth_sock" => default_ssh_auth_sock = Some(value.to_string()),
+                        "ca_keys_file" => ca_keys_file = Some(value.to_string()),
                         _ => return Err(anyhow!("Unknown parameter key '{key}'")),
                     }
                 }
@@ -61,6 +65,7 @@ impl Args {
             debug,
             file,
             default_ssh_auth_sock,
+            ca_keys_file,
         })
     }
 }

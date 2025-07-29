@@ -60,5 +60,5 @@ fn test_sk_not_present() {
     // exercise an 'sk' (hardware) key being authorized, but not present.  Correct behavior is to
     // catch the RemoteFailure SSHAgent error on the 'sk' key, and try the next key, which will
     // succeed.
-    assert!(authenticate(auth_keys, agent).unwrap())
+    assert!(authenticate(auth_keys, None, agent, "").unwrap())
 }

@@ -52,8 +52,29 @@ configuration file in `/etc/pam.d`. pam_ssh_agent currently understands the foll
 * `debug` This will increase log output to the AUTHPRIV syslog facility
 * `file=/file/name` This will modify the file holding the authorized public keys instead of the
   default `/etc/security/authorized_keys`. This path is subject to the variable expansions mentioned below
+* `ca_keys_file=/ca/keys/filename`. The file at this path, if specified, will be expected to contain lines with
+  ssh keys that are considered trusted certificate authority keys. See below for further information
+  about certificate authentication and the subtle format difference in file format compared to `file`
 * `default_ssh_auth_sock=/path/to/ssh_agent_unix_socket` the path to use if the `SSH_AUTH_SOCKET` is not
   set
+
+## SSH Certificates
+
+Besides authenticating using signatures corresponding to ssh public keys, SSH certificates can also
+be used. A certificate is considered valid if the following conditions are met:
+
+* The current time is within the validity period
+* The certificate signature is valid and was made by a trusted certificate key
+* The username provided to the plugin by the PAM_USER item is in the certificate's list of principals
+
+Just like with OpenSSH there are two ways to specify a certificate authority key. In the same way as the
+authorized_keys format, a certificate authority key can be specified alongside the regular ssh keys by being
+prefixed by a list of options that include the `cert-authority` option. In the simplest case, this means
+that the key is prefixed with `cert-authority` followed by a space and the key in its usual single line format.
+
+The second way to specify certificate authority keys work in the same way as the OpenSSH option `TrustedUserCAKeys`
+where keys without the `cert-authority` option are specified, one per line. To enable this mode of operation,
+set the `ca_keys_file` option.
   
 ## Variable expansions
 
