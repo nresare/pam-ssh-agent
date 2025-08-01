@@ -1,5 +1,6 @@
 use anyhow::Result;
-use pam_ssh_agent::{authenticate, PrintLog};
+use log::info;
+use pam_ssh_agent::authenticate;
 use ssh_agent_client_rs::Client;
 use std::env;
 use std::path::Path;
@@ -10,8 +11,14 @@ fn main() -> Result<()> {
 
     let authorized_keys_path = env::args().nth(1).expect("argument missing");
 
-    let result = authenticate(authorized_keys_path.as_str(), client, &mut PrintLog {})?;
-
-    println!("Status of authentication is: {}", result);
+    env_logger::builder()
+        .filter_level(log::LevelFilter::Info)
+        .init();
+    let result = authenticate(authorized_keys_path.as_str(), client)?;
+    if result {
+        info!("the ssh agent at {path} signed a random message as validated by {authorized_keys_path}");
+    } else {
+        info!("No public key in {authorized_keys_path} could be used with the ssh-agent at {path}");
+    }
     Ok(())
 }

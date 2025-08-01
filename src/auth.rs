@@ -1,7 +1,7 @@
 pub use crate::agent::SSHAgent;
-use crate::log::Log;
 use crate::verify::verify;
 use anyhow::{anyhow, Context, Result};
+use log::debug;
 use ssh_agent_client_rs::{Error as SACError, Identity};
 use ssh_key::public::KeyData;
 use ssh_key::AuthorizedKeys;
@@ -17,21 +17,17 @@ const CHALLENGE_SIZE: usize = 32;
 ///
 /// Returns Ok(true) if a key was found and the signature was correct, Ok(false) if no
 /// key was found, and Err if agent communication or signature verification failed.
-pub fn authenticate(
-    keys_file_path: &str,
-    mut agent: impl SSHAgent,
-    log: &mut impl Log,
-) -> Result<bool> {
+pub fn authenticate(keys_file_path: &str, mut agent: impl SSHAgent) -> Result<bool> {
     let keys = keys_from_file(Path::new(keys_file_path))?;
     for identity in agent.list_identities()? {
-        if filter_identities(&identity, &keys, log)? {
+        if filter_identities(&identity, &keys) {
             // Allow sign_and_verify() to return RemoteFailure (key not loaded / present),
             // and try the next configured key
             match sign_and_verify(identity, &mut agent) {
                 Ok(res) => return Ok(res),
                 Err(e) => {
                     if let Some(SACError::RemoteFailure) = e.downcast_ref::<SACError>() {
-                        log.debug("SSHAgent: RemoteFailure; trying next key")?;
+                        debug!("SSHAgent: RemoteFailure; trying next key");
                         continue;
                     } else {
                         return Err(e);
@@ -43,21 +39,17 @@ pub fn authenticate(
     Ok(false)
 }
 
-fn filter_identities(
-    identity: &Identity,
-    keys: &HashSet<KeyData>,
-    log: &mut impl Log,
-) -> Result<bool> {
+fn filter_identities(identity: &Identity, keys: &HashSet<KeyData>) -> bool {
     if let PublicKey(key) = identity {
         if keys.contains(key.key_data()) {
-            log.debug(format!(
+            debug!(
                 "found a matching key: {}",
                 key.fingerprint(Default::default())
-            ))?;
-            return Ok(true);
+            );
+            return true;
         }
     }
-    Ok(false)
+    false
 }
 
 fn sign_and_verify(identity: Identity<'static>, agent: &mut impl SSHAgent) -> Result<bool> {
