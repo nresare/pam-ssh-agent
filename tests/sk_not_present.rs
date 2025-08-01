@@ -1,4 +1,4 @@
-use pam_ssh_agent::{authenticate, PrintLog, SSHAgent};
+use pam_ssh_agent::{authenticate, SSHAgent};
 use signature::Signer;
 use ssh_agent_client_rs::{Error as SACError, Identity};
 use ssh_key::{Algorithm, PrivateKey, PublicKey, Signature};
@@ -60,5 +60,5 @@ fn test_sk_not_present() {
     // exercise an 'sk' (hardware) key being authorized, but not present.  Correct behavior is to
     // catch the RemoteFailure SSHAgent error on the 'sk' key, and try the next key, which will
     // succeed.
-    assert!(authenticate(auth_keys, agent, &mut PrintLog {}).unwrap())
+    assert!(authenticate(auth_keys, agent).unwrap())
 }

@@ -2,23 +2,23 @@ mod agent;
 mod args;
 mod auth;
 mod expansions;
-mod log;
+mod logging;
 #[cfg(feature = "native-crypto")]
 mod nativecrypto;
 mod verify;
 
 pub use crate::agent::SSHAgent;
 pub use crate::auth::authenticate;
-pub use crate::log::PrintLog;
 use pam::constants::{PamFlag, PamResultCode};
 use pam::module::{PamHandle, PamHooks};
 use std::env;
 use std::env::VarError;
 
 use crate::expansions::UnixEnvironment;
-use crate::log::{Log, SyslogLogger};
+use crate::logging::init_logging;
 use anyhow::{anyhow, Result};
 use args::Args;
+use log::{error, info};
 use pam::items::Service;
 use ssh_agent_client_rs::Client;
 use std::ffi::CStr;
@@ -40,25 +40,11 @@ impl PamHooks for PamSshAgent {
         args: Vec<&CStr>,
         _flags: PamFlag,
     ) -> PamResultCode {
-        let mut log = SyslogLogger::new(&get_service(pam_handle), Args::default().debug);
-
-        let args = match Args::parse(args, Some(&UnixEnvironment::new(pam_handle))) {
-            Ok(args) => args,
-            Err(e) => {
-                log.error(format!("Failed to parse args: {e}"))
-                    .expect("Failed to log");
-                return PamResultCode::PAM_SERVICE_ERR;
-            }
-        };
-        if args.debug != Args::default().debug {
-            log = SyslogLogger::new(&get_service(pam_handle), args.debug);
-        }
-
-        match do_authenticate(&mut log, &args) {
+        match run(args, pam_handle) {
             Ok(_) => PamResultCode::PAM_SUCCESS,
             Err(err) => {
                 for line in format!("{err:?}").split('\n') {
-                    log.error(line).expect("Failed to log");
+                    error!("{line}")
                 }
                 PamResultCode::PAM_AUTH_ERR
             }
@@ -76,14 +62,24 @@ impl PamHooks for PamSshAgent {
     }
 }
 
-fn do_authenticate(log: &mut impl Log, args: &Args) -> Result<()> {
+fn run(args: Vec<&CStr>, pam_handle: &PamHandle) -> Result<()> {
+    init_logging(get_service(pam_handle))?;
+    let args = Args::parse(args, Some(&UnixEnvironment::new(pam_handle)))?;
+    if args.debug {
+        log::set_max_level(log::LevelFilter::Debug);
+    }
+    do_authenticate(&args)?;
+    Ok(())
+}
+
+fn do_authenticate(args: &Args) -> Result<()> {
     let path = get_path(args)?;
-    log.info(format!(
+    info!(
         "Authenticating using ssh-agent at '{}' and keys from '{}'",
         path, args.file
-    ))?;
+    );
     let ssh_agent_client = Client::connect(Path::new(path.as_str()))?;
-    match authenticate(args.file.as_str(), ssh_agent_client, log)? {
+    match authenticate(args.file.as_str(), ssh_agent_client)? {
         true => Ok(()),
         false => Err(anyhow!("Agent did not know of any of the allowed keys")),
     }

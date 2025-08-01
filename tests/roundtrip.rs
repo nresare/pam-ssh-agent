@@ -1,4 +1,4 @@
-use pam_ssh_agent::{authenticate, PrintLog, SSHAgent};
+use pam_ssh_agent::{authenticate, SSHAgent};
 use signature::Signer;
 use ssh_agent_client_rs::Identity;
 use ssh_key::{PrivateKey, PublicKey, Signature};
@@ -39,5 +39,9 @@ fn test_roundtrip() {
     // Yes, it is a bit weird that compile time paths resolve from this dir but run time
     // paths resolve from the top dir. I'll come up with a better solution later.
     let auth_keys = "tests/data/authorized_keys";
-    assert!(authenticate(auth_keys, agent, &mut PrintLog {}).unwrap())
+    // logging for the test case
+    env_logger::builder()
+        .filter_level(log::LevelFilter::Info)
+        .init();
+    assert!(authenticate(auth_keys, agent).unwrap())
 }

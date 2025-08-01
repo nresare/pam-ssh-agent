@@ -25,6 +25,7 @@ syslog = "6.1.1"
 uzers = { version = "0.12.1", default-features = false }
 # Keep this on 0.3.x until https://bugzilla.redhat.com/show_bug.cgi?id=2272456 is resolved
 hostname = { version = "0.3.1", default-features = false }
+log = "0.4.27"
 
 # The native-crypto dependencies
 openssl = { version = "0.10.73", optional = true }
@@ -36,6 +37,7 @@ p521 = { version = "0.13.3", optional = true }
 base64 = "0.22.1"
 base64-literal = "0.1.0"
 ssh-encoding = "0.2.0"
+env_logger = "0.11.8"
 
 [features]
 native-crypto = ["dep:openssl", "dep:p256", "dep:p384", "dep:p521"]
