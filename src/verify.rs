@@ -16,7 +16,8 @@ pub fn verify(
 #[cfg(test)]
 mod tests {
     use crate::verify::verify;
-    use base64_literal::base64_literal;
+    use base64::prelude::BASE64_STANDARD;
+    use base64::Engine;
     use ssh_encoding::Decode;
     use ssh_key::{PublicKey, Signature};
 
@@ -26,10 +27,10 @@ mod tests {
             "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBK\
             gm6hassh04KocJTsu4QEMw5GRVeWR/oi9QyCZ04r3tFSYhi7GI+lJBD5WV4LSp9MOJu2WACpWjowZdeAXS\
             9uw=",
-            &base64_literal!(
+            &BASE64_STANDARD.decode(
                 "AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAABJAAAAIEC3hAQv1h3PZ1xUUGjdwr27LJBDjxM6Z7suD\
-                YAs/UIJAAAAIQC/TxC6dG/eLiv7LhMkR7SctUAc+OMGXqdHCgoMd5x+nQ=="
-            ),
+                YAs/UIJAAAAIQC/TxC6dG/eLiv7LhMkR7SctUAc+OMGXqdHCgoMd5x+nQ==",
+            )?,
         )
     }
 
@@ -39,11 +40,11 @@ mod tests {
             "ecdsa-sha2-nistp384 AAAAE2VjZHNhLXNoYTItbmlzdHAzODQAAAAIbmlzdHAzODQAAABhBA\
             ZXH05QZ3EuWZuqOmHSeGk1BwwVWwkFJ+IPwIsxi1sVCerp0Zjb4nPpKTgtN8rAyC4rTdpJnwzDnvVJ8L0j\
             IABqKuWws6UShmL/W/mfpCV8sKITlEIXhkbtErHQ4StxHg==",
-            &base64_literal!(
+            &BASE64_STANDARD.decode(
                 "AAAAE2VjZHNhLXNoYTItbmlzdHAzODQAAABpAAAAMQCg8/DrnRuxviXd6mnPFB3dtBc/HCWJfmD3h\
                 aj5mxno0q9l36JAYro8OEwKauJ4llcAAAAwDfEr+CVBS5xcey4N4+QiHYr6ch7mavMIaqX/xZHjWuI\
-                GXd1+yrxaxp4zOI0ztbLT"
-            ),
+                GXd1+yrxaxp4zOI0ztbLT",
+            )?,
         )
     }
 
@@ -54,11 +55,11 @@ mod tests {
             GWA+tCu8dqObykPnhsDj6riqGmNZnM0Ie/+xpICTRO9Zju8b76b7VNp/8q9QZ7nP91YITxDr4k21TUPZ9A\
             w1/CvADphX0THL9ADDtq8yo79Vxmw0MfATwarBDWA8YBe9i+KST1X/89tNemL4JR8IbMwXlmz6Vxl0Xt1G\
             pte0BH5QA4mg==",
-            &base64_literal!(
+            &BASE64_STANDARD.decode(
                 "AAAAE2VjZHNhLXNoYTItbmlzdHA1MjEAAACLAAAAQgCQQ7Pl5ZQoPco1J6dwGR5s8pSnA2tCBd/x8\
                 pWJIMsE5HUI/mLnFmAwi7dedk2KsHqGFVrh7CuIJcxrfGvc6Opr2gAAAEEy9ET09sbYvGqSGsmG87e\
-                lqtIfh1wUjJEffRx96k3CwMw+uihtUMTBnoi2xoxT4VvYGd5ARdo6RDD3MtJ575TFzQ=="
-            ),
+                lqtIfh1wUjJEffRx96k3CwMw+uihtUMTBnoi2xoxT4VvYGd5ARdo6RDD3MtJ575TFzQ==",
+            )?,
         )
     }
 
@@ -67,10 +68,10 @@ mod tests {
         do_verify(
             "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICn3H5p6CReDJp0cZ+nfzsqQ7jvuQz17pBBeyN\
             G1syjC",
-            &base64_literal!(
+            &BASE64_STANDARD.decode(
                 "AAAAC3NzaC1lZDI1NTE5AAAAQFaLbFzI92QL1auhVfZE354hfY+HOYcWkAbUqYLXQmqUBCWP4D12i\
-                zSmXQjtfs8hGHPJolPjfjqgqFgj3Aly/wE="
-            ),
+                zSmXQjtfs8hGHPJolPjfjqgqFgj3Aly/wE=",
+            )?,
         )
     }
 
@@ -84,7 +85,7 @@ mod tests {
             JClVn8m0l29oIINJCuZqwpBz0rKyONo9ptDIGh9bRc6oYSLPj9SzZbLqUZvC2Axw5v4YzAgKD3uSC7z4g5gYI\
             coqQNqO5g2/dlDm6py5bLC7sVKwWedxpFm1bB/1vmAvstaKbxkRwhcAzrLF5dTYq+1aUk6JGqWGSi8s5zdf2u\
             j85Bh4a0rDESBnUODQWQFgAmzf1q/uEqNqI/mHJU29dM3Wir8=",
-            &base64_literal!(
+            &BASE64_STANDARD.decode(
             "AAAADHJzYS1zaGEyLTUxMgAAAYBaehPjXOehIg2wOHa0a+u4g91oyZ8NgX7Mibgnkrdf+FB8KWCWKL8zIACp\
             AjSnAo0UXQb1etfpROAS8zqTUnONUi3Hs852rOaiNLWQcxhMeszMCbLrY5JaXRWhmm92nsBXNRkgrLvaH1fJ0\
             d7NlaXYHjI4E/v2jwUVOIb4trI55mJFB2l6jPjmlwRY+wchh6xJ5HmRbY7mJ2ypcsunuxlSj9XUKV2ABVdG+V\
@@ -92,7 +93,7 @@ mod tests {
             IXG/H1kdaAHa5fmH791msc26DwrVJqlZG8A5hoTrZpiNEZnumPHmLB5E/yQxqlokHtajIkvEttu1jk9CJRizm\
             Xtw/Fbx+SBAbP+f2Hw27N0lPTH2YaAg8Uic0XkLUyO3FVD/abmR0vv+8nsOEdAHTFQxlK4Y+Vl6nld6Tepe/Z\
             f4suG0T1HWqHECBscaam+nx3yJzMh8="
-            ),
+            )?,
         )
     }
 
@@ -104,13 +105,13 @@ mod tests {
             txMzwk0e7GmiHbPaIZ3qZlaD4X+k4YviQQ1GLvutegvUXB8aT1SwICf/0aYICZV1u1+Ymu1A5rvBiO5Is4pQ6\
             40AG5rA1cTFBUA/8VzogXT+7UQowzj5T0sxzpNEFyUIDQcD02Si1/O8c054Ztzbkyd0CgJVyul4/OOQBv08Le\
             tD0lQT32iqiQbLe9GJwI3ubWJ51qyEnjUlGkUzn4sAV1Skfb",
-            &base64_literal!(
+            &BASE64_STANDARD.decode(
                 "AAAADHJzYS1zaGEyLTI1NgAAAQCZd3rHyxoZ42KdB73ZW+wKYTKDCZwogbBkRkyjwUZQro+/b+lj4D2r\
                 3lsbQW6Ynh/q6Y97jt6dtUbIq3bXdhLqh+pmLWnqAWY+8s5lSOXi9q8UiCCzerKFNspjvHN2iCTDYalVo\
                 pTacrzcN0VyT1BMXZRdQqsG9VohSbBJhl+g/z9vfC00M/zgrZ+qIgjESO/F+ER4od/niwACdTj53VsiHW\
                 SZlApcMpNM3kLjwRBD6dKFkJa/ZPMWMHj+CoQx9yamJGTZUAXMGSoxu5SBD39bXZ+26giwx7nOAO15UMz\
-                qKSv2bTWqYPrl4emlwL95cj7eGUvs4+v5p9LGyHqLvZfp"
-            ),
+                qKSv2bTWqYPrl4emlwL95cj7eGUvs4+v5p9LGyHqLvZfp",
+            )?,
         )
     }
 

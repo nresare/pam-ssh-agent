@@ -35,7 +35,6 @@ p521 = { version = "0.13.3", optional = true }
 
 [dev-dependencies]
 base64 = "0.22.1"
-base64-literal = "0.1.0"
 ssh-encoding = "0.2.0"
 env_logger = "0.11.8"
 
