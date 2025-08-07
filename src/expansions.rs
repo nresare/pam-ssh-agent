@@ -1,20 +1,24 @@
 use anyhow::{anyhow, Result};
-use pam::items::RUser;
+use pam::items::{Service, User, RUser};
 use pam::module::PamHandle;
 use std::borrow::Cow;
 use uzers::get_user_by_name;
 use uzers::os::unix::UserExt;
 
 pub trait Environment {
-    fn get_homedir(&self, user: &str) -> Result<Cow<str>>;
+    fn get_service(&self) -> Result<Cow<str>>;
 
-    fn get_username(&self) -> Result<Cow<str>>;
+    fn get_target_username(&self) -> Result<Cow<str>>;
+
+    fn get_requesting_username(&self) -> Result<Cow<str>>;
+
+    fn get_uid(&self, user: &str) -> Result<Cow<str>>;
+
+    fn get_homedir(&self, user: &str) -> Result<Cow<str>>;
 
     fn get_hostname(&self) -> Result<Cow<str>>;
 
     fn get_fqdn(&self) -> Result<Cow<str>>;
-
-    fn get_uid(&self) -> Result<Cow<str>>;
 }
 
 pub struct UnixEnvironment<'a> {
@@ -28,25 +32,48 @@ impl<'a> UnixEnvironment<'a> {
 }
 
 impl Environment for UnixEnvironment<'_> {
+    // "Service" is the name of the software that called PAM for authentication.
+    fn get_service(&self) -> Result<Cow<str>> {
+        let service = match self.pam_handle.get_item::<Service>() {
+            Ok(Some(service)) => service,
+            _ => return Err(anyhow!("Failed to get PAM service")),
+        };
+        Ok(Cow::from(
+            String::from_utf8_lossy(service.0.to_bytes()).to_string(),
+        ))
+    }
+
+    fn get_target_username(&self) -> Result<Cow<str>> {
+        let user = match self.pam_handle.get_item::<User>() {
+            Ok(Some(user)) => user,
+            _ => return Err(anyhow!("Failed to get PAM_USER target username")),
+        };
+        Ok(Cow::from(
+            String::from_utf8_lossy(user.0.to_bytes()).to_string(),
+        ))
+    }
+
+    fn get_requesting_username(&self) -> Result<Cow<str>> {
+        let user = match self.pam_handle.get_item::<RUser>() {
+            Ok(Some(user)) => user,
+            _ => return Err(anyhow!("Failed to get requesting PAM_RUSER requesting username")),
+        };
+        Ok(Cow::from(
+            String::from_utf8_lossy(user.0.to_bytes()).to_string(),
+        ))
+    }
+
+    fn get_uid(&self, user: &str) -> Result<Cow<str>> {
+        let user = get_user_by_name(user)
+            .ok_or_else(|| anyhow!("Failed to look up user with username {}", user))?;
+        Ok(Cow::from(user.uid().to_string()))
+    }
+
     fn get_homedir(&self, user: &str) -> Result<Cow<str>> {
         match get_user_by_name(user) {
             Some(user) => Ok(Cow::Owned(user.home_dir().to_string_lossy().to_string())),
             None => Err(anyhow!("homedir for {} not found", user)),
         }
-    }
-
-    fn get_username(&self) -> Result<Cow<str>> {
-        let service = match self.pam_handle.get_item::<RUser>() {
-            Ok(Some(service)) => service,
-            _ => {
-                return Err(anyhow!(
-                    "Failed to obtain the PAM_RUSER item needed for variable expansion"
-                ))
-            }
-        };
-        Ok(Cow::from(
-            String::from_utf8_lossy(service.0.to_bytes()).to_string(),
-        ))
     }
 
     fn get_hostname(&self) -> Result<Cow<str>> {
@@ -61,13 +88,6 @@ impl Environment for UnixEnvironment<'_> {
     fn get_fqdn(&self) -> Result<Cow<str>> {
         Ok(Cow::from(get_hostname()?))
     }
-
-    fn get_uid(&self) -> Result<Cow<str>> {
-        let username = self.get_username()?;
-        let user = get_user_by_name(&username as &str)
-            .ok_or_else(|| anyhow!("Failed to look up user with username {}", username))?;
-        Ok(Cow::from(user.uid().to_string()))
-    }
 }
 
 fn get_hostname() -> Result<String> {
@@ -78,7 +98,7 @@ fn get_hostname() -> Result<String> {
 pub fn expand_vars<'a>(input: &'a str, env: &'a dyn Environment) -> Result<Cow<'a, str>> {
     let get_home = |s: &str| {
         if s.is_empty() {
-            let user = env.get_username()?;
+            let user = env.get_requesting_username()?;
             Ok(env.get_homedir(&user)?)
         } else {
             Ok(env.get_homedir(s)?)
@@ -86,12 +106,12 @@ pub fn expand_vars<'a>(input: &'a str, env: &'a dyn Environment) -> Result<Cow<'
     };
     let mut input = expand_homedir(Cow::from(input), get_home)?;
     input = expand_var(input, "%h", || {
-        env.get_homedir(env.get_username()?.as_ref())
+        env.get_homedir(env.get_requesting_username()?.as_ref())
     })?;
+    input = expand_var(input, "%u", || env.get_requesting_username())?;
+    input = expand_var(input, "%U", || env.get_uid(&env.get_requesting_username()?))?;
     input = expand_var(input, "%H", || env.get_hostname())?;
-    input = expand_var(input, "%u", || env.get_username())?;
     input = expand_var(input, "%f", || env.get_fqdn())?;
-    input = expand_var(input, "%U", || env.get_uid())?;
     Ok(input)
 }
 
@@ -115,14 +135,14 @@ where
     let Some(idx) = input.find('~') else {
         return Ok(input);
     };
-    let user = get_username(&input, idx);
+    let user = get_username_from_homedir(&input, idx);
     let mut output = input[..idx].to_string();
     output.push_str(get_homedir(user)?.as_ref());
     output.push_str(&input[idx + 1 + user.len()..]);
     Ok(Cow::from(output))
 }
 
-fn get_username(input: &str, idx: usize) -> &str {
+fn get_username_from_homedir(input: &str, idx: usize) -> &str {
     let idx = idx + 1;
     for (offset, char) in input[idx..].bytes().enumerate() {
         if char == b'/' {
@@ -134,7 +154,8 @@ fn get_username(input: &str, idx: usize) -> &str {
 
 #[cfg(test)]
 mod tests {
-    use crate::expansions::{expand_homedir, expand_var, expand_vars, get_username, Environment};
+    use crate::expansions::{expand_homedir, expand_var, expand_vars, Environment};
+    use crate::expansions::get_username_from_homedir;
     use anyhow::Result;
     use std::borrow::Cow;
     use std::cell::RefCell;
@@ -185,17 +206,17 @@ mod tests {
 
     #[test]
     fn test_expand_vars() -> Result<()> {
-        let env = DummyEnv::new(vec!["/another/bob", "host", "user"]);
+        let env = DummyEnv::new(vec!["/another/bob", "user", "host"]);
         let result = expand_vars("~bob/.foo/%H/%u/file", &env)?;
         assert_eq!("/another/bob/.foo/host/user/file", &result);
         Ok(())
     }
 
     #[test]
-    fn test_get_username() {
-        assert_eq!("alice", get_username("~alice/foo", 0));
-        assert_eq!("", get_username("~/foo", 0));
-        assert_eq!("bob", get_username("~bob", 0));
+    fn test_get_username_from_homedir() {
+        assert_eq!("alice", get_username_from_homedir("~alice/foo", 0));
+        assert_eq!("", get_username_from_homedir("~/foo", 0));
+        assert_eq!("bob", get_username_from_homedir("~bob", 0));
     }
 
     struct DummyEnv {
@@ -217,11 +238,23 @@ mod tests {
     }
 
     impl Environment for DummyEnv {
-        fn get_homedir(&self, _user: &str) -> Result<Cow<str>> {
+        fn get_service(&self) -> Result<Cow<str>> {
             self.answer()
         }
 
-        fn get_username(&self) -> Result<Cow<str>> {
+        fn get_target_username(&self) -> Result<Cow<str>> {
+            self.answer()
+        }
+
+        fn get_requesting_username(&self) -> Result<Cow<str>> {
+            self.answer()
+        }
+
+        fn get_uid(&self, _user: &str) -> Result<Cow<str>> {
+            self.answer()
+        }
+
+        fn get_homedir(&self, _user: &str) -> Result<Cow<str>> {
             self.answer()
         }
 
@@ -230,10 +263,6 @@ mod tests {
         }
 
         fn get_fqdn(&self) -> Result<Cow<str>> {
-            self.answer()
-        }
-
-        fn get_uid(&self) -> Result<Cow<str>> {
             self.answer()
         }
     }
