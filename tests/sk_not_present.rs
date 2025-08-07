@@ -1,4 +1,4 @@
-use pam_ssh_agent::{authenticate, SSHAgent};
+use pam_ssh_agent::{args::Args, authenticate, SSHAgent};
 use signature::Signer;
 use ssh_agent_client_rs::{Error as SACError, Identity};
 use ssh_key::{Algorithm, PrivateKey, PublicKey, Signature};
@@ -55,10 +55,13 @@ impl SSHAgent for DummySshAgent {
 #[test]
 fn test_sk_not_present() {
     let agent = DummySshAgent::new();
-    let auth_keys = "tests/data/authorized_keys_with_sk";
+    let args = Args {
+        file: Some("tests/data/authorized_keys_with_sk".into()),
+        ..Default::default()
+    };
 
     // exercise an 'sk' (hardware) key being authorized, but not present.  Correct behavior is to
     // catch the RemoteFailure SSHAgent error on the 'sk' key, and try the next key, which will
     // succeed.
-    assert!(authenticate(auth_keys, None, agent, "").unwrap())
+    assert!(authenticate(None, &args, agent).unwrap())
 }

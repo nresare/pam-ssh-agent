@@ -1,13 +1,20 @@
 pub use crate::agent::SSHAgent;
+use crate::args::Args;
+use crate::expansions::Environment;
 use crate::verify::verify;
-use anyhow::{anyhow, Context, Result};
-use log::{debug, info};
+use anyhow::{anyhow, Result};
+use log::{debug, info, warn};
 use ssh_agent_client_rs::{Error as SACError, Identity};
 use ssh_key::public::KeyData;
 use ssh_key::{AuthorizedKeys, HashAlg};
+use std::borrow::Cow;
 use std::collections::HashSet;
+use std::fs;
+use std::os::unix::process::CommandExt;
 use std::path::Path;
+use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
+use uzers::{get_user_by_name, uid_t, gid_t, get_effective_uid};
 use Identity::{Certificate, PublicKey};
 
 const CHALLENGE_SIZE: usize = 32;
@@ -19,19 +26,31 @@ const CHALLENGE_SIZE: usize = 32;
 /// Returns Ok(true) if a key was found and the signature was correct, Ok(false) if no
 /// key was found, and Err if agent communication or signature verification failed.
 pub fn authenticate(
-    keys_file_path: &str,
-    ca_keys_file: Option<&str>,
+    env: Option<&dyn Environment>,
+    args: &Args,
     mut agent: impl SSHAgent,
-    principal: &str,
 ) -> Result<bool> {
-    let filter =
-        IdentityFilter::from_files(Path::new(keys_file_path), ca_keys_file.map(Path::new))?;
+    let principal: Option<Cow<str>> = match env {
+        Some(env) => match env.get_target_username() {
+            Ok(u) => Some(u),
+            Err(e) => {
+                warn!("Skipping all certs due to error: {}", e.to_string());
+                None
+            },
+        },
+        // (For testing) Skipping all certs due to missing environment
+        None => None,
+    };
+
+    let filter = IdentityFilter::from(env, args)?;
     for identity in agent.list_identities()? {
         if filter.filter(&identity) {
             if let Certificate(cert) = &identity {
-                if !validate_cert(cert, SystemTime::now(), principal) {
-                    info!("Cert not valid, skipping");
-                    continue;
+                if let Some(ref principal) = principal {
+                    if !validate_cert(cert, SystemTime::now(), &principal) {
+                        info!("Cert not valid, skipping");
+                        continue;
+                    }
                 }
             }
             // Allow sign_and_verify() to return RemoteFailure (key not loaded / present),
@@ -69,29 +88,144 @@ struct IdentityFilter {
 }
 
 impl IdentityFilter {
-    fn from_files(path: &Path, ca_keys_file: Option<&Path>) -> Result<Self> {
+    fn from(env: Option<&dyn Environment>, args: &Args) -> Result<Self> {
         let mut keys: HashSet<KeyData> = HashSet::new();
         let mut ca_keys: HashSet<KeyData> = HashSet::new();
 
-        for entry in
-            AuthorizedKeys::read_file(path).context(format!("Failed to read from {path:?}"))?
-        {
-            let opts = entry.config_opts();
-            if opts.iter().any(|o| o == "cert-authority") {
-                ca_keys.insert(entry.public_key().key_data().to_owned());
-            } else {
-                keys.insert(entry.public_key().key_data().to_owned());
+        if let Some(file) = args.file.as_deref() {
+            if let Err(e) = Self::from_keys_file(&file, &mut keys, &mut ca_keys) {
+                warn!("Skipping keys in file {} due to error: {}", file, e.to_string());
+                // Continue with other key sources after error
             }
         }
 
-        if let Some(key_path) = ca_keys_file {
-            for entry in AuthorizedKeys::read_file(key_path)
-                .context(format!("Failed to read trusted ca keys from {key_path:?}"))?
-            {
-                ca_keys.insert(entry.public_key().key_data().to_owned());
+        if let Some(file) = args.ca_keys_file.as_deref() {
+            if let Err(e) = Self::from_ca_keys_file(&file, &mut keys, &mut ca_keys) {
+                warn!("Skipping ca keys in file {} due to error: {}", file, e.to_string());
+                // Continue with other key sources after error
             }
         }
+
+        if let Some(cmd) = args.keys_command.as_deref() {
+            // Skip command if env is None (for testing)
+            if let Some(env) = env {
+                match env.get_requesting_username() {
+                    Ok(r_usr) => {
+                        let c_usr = &args.command_user;
+                        if let Err(e) = Self::from_keys_command(
+                            &cmd, c_usr, &r_usr, &mut keys, &mut ca_keys
+                        ) {
+                            warn!("Skipping keys from command {} due to error: {}", cmd, e.to_string());
+                        }
+                    },
+                    Err(e) => {
+                        warn!("Skipping keys from command {} due to error: {}", cmd, e.to_string());
+                    },
+                }
+                // Continue with other key sources after error
+            }
+        }
+
         Ok(IdentityFilter { keys, ca_keys })
+    }
+
+    fn from_keys_file(
+        file: &str,
+        keys: &mut HashSet<KeyData>,
+        ca_keys: &mut HashSet<KeyData>,
+    ) -> Result<()> {
+        let data: String = fs::read_to_string(Path::new(file))?;
+        for entry in AuthorizedKeys::new(&data) {
+            match entry {
+                Ok(entry) => {
+                    let opts = entry.config_opts();
+                    if opts.iter().any(|o| o == "cert-authority") {
+                        ca_keys.insert(entry.public_key().key_data().to_owned());
+                    } else {
+                        keys.insert(entry.public_key().key_data().to_owned());
+                    }
+                }
+                Err(e) => {
+                    warn!("Ignoring invalid entry in {}: {}", file, e.to_string());
+                    // Continue with other keys after error
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn from_ca_keys_file(
+        file: &str,
+        _keys: &mut HashSet<KeyData>,
+        ca_keys: &mut HashSet<KeyData>,
+    ) -> Result<()> {
+        let data: String = fs::read_to_string(Path::new(file))?;
+        for entry in AuthorizedKeys::new(&data) {
+            match entry {
+                Ok(entry) => {
+                    ca_keys.insert(entry.public_key().key_data().to_owned());
+                }
+                Err(e) => {
+                    warn!("Ignoring invalid entry in {}: {}", file, e.to_string());
+                    // Continue with other keys after error
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn from_keys_command(
+        command: &str,
+        command_user: &Option<String>,
+        req_user: &str,
+        keys: &mut HashSet<KeyData>,
+        ca_keys: &mut HashSet<KeyData>,
+    ) -> Result<()> {
+        let euid: uid_t = get_effective_uid();  let euid_str = euid.to_string();
+        let cmd_user: &str; let mut cmd_uid: uid_t = 0; let mut cmd_gid: gid_t = 0;
+        if euid == 0 {
+            cmd_user = if let Some(u) = command_user { &u } else { req_user };
+            if let Some(user_info) = get_user_by_name(cmd_user) {
+                cmd_uid = user_info.uid();
+                cmd_gid = user_info.primary_group_id();
+            } else {
+                return Err(anyhow!("Failed to look up user with username {cmd_user}"));
+            }
+        } else {
+            cmd_user = &euid_str;
+        }
+
+        info!("Running authorized_keys_command `{} {}` as user `{}`",
+            command, req_user, cmd_user);
+        let mut cmd_binding = Command::new(command);
+        // Cannot be combined with the above line, as that takes the Command object out of scope
+        let mut cmd = cmd_binding.arg(req_user);
+        if cmd_uid != 0 { cmd = cmd.uid(cmd_uid); }
+        if cmd_gid != 0 { cmd = cmd.gid(cmd_gid); }
+
+        let result = cmd.output()?;
+        if !result.status.success() {
+            return Err(anyhow!("Command exited with status {:?}", result.status.code()));
+        }
+        let data = String::from_utf8(result.stdout)?;
+        for entry in AuthorizedKeys::new(&data) {
+            match entry {
+                Ok(entry) => {
+                    let opts = entry.config_opts();
+                    if opts.iter().any(|o| o == "cert-authority") {
+                        ca_keys.insert(entry.public_key().key_data().to_owned());
+                    } else {
+                        keys.insert(entry.public_key().key_data().to_owned());
+                    }
+                }
+                Err(e) => {
+                    warn!("Ignoring invalid entry in authorized_keys_command `{} {}` output: {}",
+                        command, req_user, e.to_string());
+                    // Continue with other keys after error
+                }
+            }
+        }
+        Ok(())
     }
 
     fn filter(&self, identity: &Identity) -> bool {
@@ -148,11 +282,11 @@ fn validate_cert(cert: &ssh_key::Certificate, when: SystemTime, principal: &str)
 
 #[cfg(test)]
 mod test {
+    use crate::args::Args;
     use crate::auth::{validate_cert, IdentityFilter};
     use anyhow::Result;
     use ssh_agent_client_rs::Identity;
     use ssh_key::Certificate;
-    use std::path::Path;
     use std::time::{Duration, SystemTime};
 
     macro_rules! data {
@@ -163,22 +297,20 @@ mod test {
 
     #[test]
     fn test_read_public_keys() -> Result<()> {
-        let path = Path::new(data!("authorized_keys"));
-
-        let filter = IdentityFilter::from_files(path, None)?;
+        let mut args: Args = Default::default();
 
         // authorized_keys contains the certificate authority key for the CERT_STR cert
+        args.file = Some(data!("authorized_keys").into());
+        let filter = IdentityFilter::from(None, &args)?;
         let cert = Certificate::from_openssh(CERT_STR)?;
         let identity: Identity = cert.into();
         assert!(filter.filter(&identity));
 
         // verify that when using the ca_keys_file parameter, we can use he raw key and don't need
         // the 'cert-authority ' prefix.
-        let filter = IdentityFilter::from_files(
-            // an empty file works for our purposes
-            Path::new("/dev/null"),
-            Some(Path::new(data!("ca_key.pub"))),
-        )?;
+        args.file = Some("/dev/null".into());
+        args.ca_keys_file = Some(data!("ca_key.pub").into());
+        let filter = IdentityFilter::from(None, &args)?;
         assert!(filter.filter(&identity));
 
         Ok(())

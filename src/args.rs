@@ -10,18 +10,22 @@ const DEFAULT_AUTHORIZED_KEYS_PATH: &str = "/etc/security/authorized_keys";
 #[derive(Debug, Eq, PartialEq)]
 pub struct Args {
     pub debug: bool,
-    pub file: String,
-    pub default_ssh_auth_sock: Option<String>,
+    pub file: Option<String>,
     pub ca_keys_file: Option<String>,
+    pub keys_command: Option<String>,
+    pub command_user: Option<String>,
+    pub default_ssh_auth_sock: Option<String>,
 }
 
 impl Default for Args {
     fn default() -> Self {
         Args {
             debug: false,
-            file: String::from(DEFAULT_AUTHORIZED_KEYS_PATH),
-            default_ssh_auth_sock: None,
+            file: Some(String::from(DEFAULT_AUTHORIZED_KEYS_PATH)),
             ca_keys_file: None,
+            keys_command: None,
+            command_user: None,
+            default_ssh_auth_sock: None,
         }
     }
 }
@@ -30,9 +34,11 @@ impl Args {
     /// Parses args and returns an Args instance with the parsed arguments, if pam_handle
     pub fn parse(args: Vec<&CStr>, env: Option<&dyn Environment>) -> Result<Self> {
         let mut debug = false;
-        let mut file: String = String::from(DEFAULT_AUTHORIZED_KEYS_PATH);
-        let mut default_ssh_auth_sock = None;
+        let mut file: Option<String> = None;
         let mut ca_keys_file: Option<String> = None;
+        let mut keys_command: Option<String> = None;
+        let mut command_user: Option<String> = None;
+        let mut default_ssh_auth_sock: Option<String> = None;
 
         for arg in args
             .iter()
@@ -53,19 +59,26 @@ impl Args {
                     }
                     let (key, value) = (parts[0], parts[1]);
                     match key {
-                        "file" => file = value.to_string(),
-                        "default_ssh_auth_sock" => default_ssh_auth_sock = Some(value.to_string()),
+                        "file" => file = Some(value.to_string()),
                         "ca_keys_file" => ca_keys_file = Some(value.to_string()),
+                        "authorized_keys_command" => keys_command = Some(value.to_string()),
+                        "authorized_keys_command_user" => command_user = Some(value.to_string()),
+                        "default_ssh_auth_sock" => default_ssh_auth_sock = Some(value.to_string()),
                         _ => return Err(anyhow!("Unknown parameter key '{key}'")),
                     }
                 }
             }
         }
+        if ! [&file, &ca_keys_file, &keys_command].iter().any(|a| a.is_some()) {
+            file = Some(String::from(DEFAULT_AUTHORIZED_KEYS_PATH));
+        }
         Ok(Args {
             debug,
             file,
-            default_ssh_auth_sock,
             ca_keys_file,
+            keys_command,
+            command_user,
+            default_ssh_auth_sock,
         })
     }
 }
@@ -116,12 +129,22 @@ mod test {
 
         let expected = Args {
             debug: true,
-            file: "/dev/null".into(),
+            file: Some("/dev/null".into()),
             ..Default::default()
         };
         assert_eq!(
             expected,
             Args::parse(args!("debug", "file=/dev/null").refs(), None)?,
+        );
+
+        let expected = Args {
+            file: None,
+            keys_command: Some("/bin/true".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            expected,
+            Args::parse(args!("authorized_keys_command=/bin/true").refs(), None)?,
         );
 
         let expected = Args {

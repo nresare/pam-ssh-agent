@@ -1,5 +1,5 @@
 mod agent;
-mod args;
+pub mod args;
 mod auth;
 mod expansions;
 mod logging;
@@ -14,12 +14,11 @@ use pam::module::{PamHandle, PamHooks};
 use std::env;
 use std::env::VarError;
 
-use crate::expansions::UnixEnvironment;
+use crate::expansions::{UnixEnvironment, Environment};
 use crate::logging::init_logging;
 use anyhow::{anyhow, Result};
 use args::Args;
 use log::{error, info};
-use pam::items::{Service, User};
 use ssh_agent_client_rs::Client;
 use std::ffi::CStr;
 use std::path::Path;
@@ -63,28 +62,28 @@ impl PamHooks for PamSshAgent {
 }
 
 fn run(args: Vec<&CStr>, pam_handle: &PamHandle) -> Result<()> {
-    init_logging(get_service(pam_handle))?;
-    let args = Args::parse(args, Some(&UnixEnvironment::new(pam_handle)))?;
+    let env = UnixEnvironment::new(pam_handle);
+    let service = match env.get_service() {
+        Ok(service) => service,
+        _ => "unknown".into(),
+    };
+    init_logging(service.to_string())?;
+    let args = Args::parse(args, Some(&env))?;
     if args.debug {
         log::set_max_level(log::LevelFilter::Debug);
     }
-    do_authenticate(&args, pam_handle)?;
+    do_authenticate(Some(&env), &args)?;
     Ok(())
 }
 
-fn do_authenticate(args: &Args, handle: &PamHandle) -> Result<()> {
+fn do_authenticate(env: Option<&dyn Environment>, args: &Args) -> Result<()> {
     let path = get_path(args)?;
     info!(
-        "Authenticating using ssh-agent at '{}' and keys from '{}'",
-        path, args.file
+        "Authenticating using ssh-agent at '{}'",
+        path
     );
     let ssh_agent_client = Client::connect(Path::new(path.as_str()))?;
-    match authenticate(
-        args.file.as_str(),
-        args.ca_keys_file.as_deref(),
-        ssh_agent_client,
-        &get_user(handle)?,
-    )? {
+    match authenticate(env, args, ssh_agent_client)? {
         true => Ok(()),
         false => Err(anyhow!("Agent did not know of any of the allowed keys")),
     }
@@ -105,24 +104,4 @@ fn get_path(args: &Args) -> Result<String> {
             "SSH_AUTH_SOCK not set and the default_ssh_auth_sock parameter is not set"
         )),
     }
-}
-
-/// Fetch the name of the current service, i.e. the software that uses pam for authentication
-/// using the PamHandle::get_item() method.
-fn get_service(pam_handle: &PamHandle) -> String {
-    let service = match pam_handle.get_item::<Service>() {
-        Ok(Some(service)) => service,
-        _ => return "unknown".into(),
-    };
-    String::from_utf8_lossy(service.0.to_bytes()).to_string()
-}
-
-/// Fetch the name of the current service, i.e. the software that uses pam for authentication
-/// using the PamHandle::get_item() method.
-fn get_user(pam_handle: &PamHandle) -> Result<String> {
-    let service = match pam_handle.get_item::<User>() {
-        Ok(Some(user)) => user,
-        _ => return Err(anyhow!("Failed to get user")),
-    };
-    Ok(String::from_utf8_lossy(service.0.to_bytes()).to_string())
 }

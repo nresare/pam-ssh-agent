@@ -1,4 +1,4 @@
-use pam_ssh_agent::{authenticate, SSHAgent};
+use pam_ssh_agent::{authenticate, SSHAgent, args::Args};
 use signature::Signer;
 use ssh_agent_client_rs::Identity;
 use ssh_key::{PrivateKey, PublicKey, Signature};
@@ -36,12 +36,15 @@ impl SSHAgent for DummySshAgent {
 #[test]
 fn test_roundtrip() {
     let agent = DummySshAgent::new();
-    // Yes, it is a bit weird that compile time paths resolve from this dir but run time
-    // paths resolve from the top dir. I'll come up with a better solution later.
-    let auth_keys = "tests/data/authorized_keys";
+    let args = Args {
+        // Yes, it is a bit weird that compile time paths resolve from this dir but run time
+        // paths resolve from the top dir. I'll come up with a better solution later.
+        file: Some("tests/data/authorized_keys".into()),
+        ..Default::default()
+    };
     // logging for the test case
     env_logger::builder()
         .filter_level(log::LevelFilter::Info)
         .init();
-    assert!(authenticate(auth_keys, None, agent, "").unwrap())
+    assert!(authenticate(None, &args, agent).unwrap())
 }
