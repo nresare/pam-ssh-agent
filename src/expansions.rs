@@ -108,8 +108,13 @@ pub fn expand_vars<'a>(input: &'a str, env: &'a dyn Environment) -> Result<Cow<'
     input = expand_var(input, "%h", || {
         env.get_homedir(env.get_requesting_username()?.as_ref())
     })?;
-    input = expand_var(input, "%u", || env.get_requesting_username())?;
-    input = expand_var(input, "%U", || env.get_uid(&env.get_requesting_username()?))?;
+    input = expand_var(input, "%r", || env.get_requesting_username())?;
+    input = expand_var(input, "%R", || env.get_uid(&env.get_requesting_username()?))?;
+    input = expand_var(input, "%m", || {
+        env.get_homedir(env.get_target_username()?.as_ref())
+    })?;
+    input = expand_var(input, "%u", || env.get_target_username())?;
+    input = expand_var(input, "%U", || env.get_uid(&env.get_target_username()?))?;
     input = expand_var(input, "%H", || env.get_hostname())?;
     input = expand_var(input, "%f", || env.get_fqdn())?;
     Ok(input)
