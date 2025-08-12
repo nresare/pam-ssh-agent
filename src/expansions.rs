@@ -6,15 +6,15 @@ use uzers::get_user_by_name;
 use uzers::os::unix::UserExt;
 
 pub trait Environment {
-    fn get_homedir(&self, user: &str) -> Result<Cow<str>>;
+    fn get_homedir(&'_ self, user: &str) -> Result<Cow<'_, str>>;
 
-    fn get_username(&self) -> Result<Cow<str>>;
+    fn get_username(&'_ self) -> Result<Cow<'_, str>>;
 
-    fn get_hostname(&self) -> Result<Cow<str>>;
+    fn get_hostname(&'_ self) -> Result<Cow<'_, str>>;
 
-    fn get_fqdn(&self) -> Result<Cow<str>>;
+    fn get_fqdn(&'_ self) -> Result<Cow<'_, str>>;
 
-    fn get_uid(&self) -> Result<Cow<str>>;
+    fn get_uid(&'_ self) -> Result<Cow<'_, str>>;
 }
 
 pub struct UnixEnvironment<'a> {
@@ -28,14 +28,14 @@ impl<'a> UnixEnvironment<'a> {
 }
 
 impl Environment for UnixEnvironment<'_> {
-    fn get_homedir(&self, user: &str) -> Result<Cow<str>> {
+    fn get_homedir(&'_ self, user: &str) -> Result<Cow<'_, str>> {
         match get_user_by_name(user) {
             Some(user) => Ok(Cow::Owned(user.home_dir().to_string_lossy().to_string())),
             None => Err(anyhow!("homedir for {} not found", user)),
         }
     }
 
-    fn get_username(&self) -> Result<Cow<str>> {
+    fn get_username(&'_ self) -> Result<Cow<'_, str>> {
         let service = match self.pam_handle.get_item::<RUser>() {
             Ok(Some(service)) => service,
             _ => {
@@ -49,7 +49,7 @@ impl Environment for UnixEnvironment<'_> {
         ))
     }
 
-    fn get_hostname(&self) -> Result<Cow<str>> {
+    fn get_hostname(&'_ self) -> Result<Cow<'_, str>> {
         let hostname = get_hostname()?;
         let hostname = hostname
             .split('.')
@@ -58,11 +58,11 @@ impl Environment for UnixEnvironment<'_> {
         Ok(Cow::from(hostname.to_string()))
     }
 
-    fn get_fqdn(&self) -> Result<Cow<str>> {
+    fn get_fqdn(&'_ self) -> Result<Cow<'_, str>> {
         Ok(Cow::from(get_hostname()?))
     }
 
-    fn get_uid(&self) -> Result<Cow<str>> {
+    fn get_uid(&'_ self) -> Result<Cow<'_, str>> {
         let username = self.get_username()?;
         let user = get_user_by_name(&username as &str)
             .ok_or_else(|| anyhow!("Failed to look up user with username {}", username))?;
@@ -209,7 +209,7 @@ mod tests {
             }
         }
 
-        fn answer(&self) -> Result<Cow<str>> {
+        fn answer(&'_ self) -> Result<Cow<'_, str>> {
             Ok(Cow::from(
                 self.answers.borrow_mut().pop_front().unwrap().to_string(),
             ))
@@ -217,23 +217,23 @@ mod tests {
     }
 
     impl Environment for DummyEnv {
-        fn get_homedir(&self, _user: &str) -> Result<Cow<str>> {
+        fn get_homedir(&'_ self, _user: &str) -> Result<Cow<'_, str>> {
             self.answer()
         }
 
-        fn get_username(&self) -> Result<Cow<str>> {
+        fn get_username(&'_ self) -> Result<Cow<'_, str>> {
             self.answer()
         }
 
-        fn get_hostname(&self) -> Result<Cow<str>> {
+        fn get_hostname(&'_ self) -> Result<Cow<'_, str>> {
             self.answer()
         }
 
-        fn get_fqdn(&self) -> Result<Cow<str>> {
+        fn get_fqdn(&'_ self) -> Result<Cow<'_, str>> {
             self.answer()
         }
 
-        fn get_uid(&self) -> Result<Cow<str>> {
+        fn get_uid(&'_ self) -> Result<Cow<'_, str>> {
             self.answer()
         }
     }
