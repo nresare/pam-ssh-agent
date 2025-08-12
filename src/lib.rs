@@ -2,9 +2,12 @@ mod agent;
 mod args;
 mod auth;
 mod expansions;
+pub mod filter;
 mod logging;
 #[cfg(feature = "native-crypto")]
 mod nativecrypto;
+#[cfg(test)]
+mod test;
 mod verify;
 
 pub use crate::agent::SSHAgent;
@@ -15,6 +18,7 @@ use std::env;
 use std::env::VarError;
 
 use crate::expansions::UnixEnvironment;
+use crate::filter::IdentityFilter;
 use crate::logging::init_logging;
 use anyhow::{anyhow, Result};
 use args::Args;
@@ -79,12 +83,11 @@ fn do_authenticate(args: &Args, handle: &PamHandle) -> Result<()> {
         path, args.file
     );
     let ssh_agent_client = Client::connect(Path::new(path.as_str()))?;
-    match authenticate(
-        args.file.as_str(),
-        args.ca_keys_file.as_deref(),
-        ssh_agent_client,
-        &get_user(handle)?,
-    )? {
+    let filter = IdentityFilter::from_files(
+        Path::new(args.file.as_str()),
+        args.ca_keys_file.as_deref().map(Path::new),
+    )?;
+    match authenticate(&filter, ssh_agent_client, &get_user(handle)?)? {
         true => Ok(()),
         false => Err(anyhow!("Agent did not know of any of the allowed keys")),
     }

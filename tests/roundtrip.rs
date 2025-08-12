@@ -1,7 +1,9 @@
+use pam_ssh_agent::filter::IdentityFilter;
 use pam_ssh_agent::{authenticate, SSHAgent};
 use signature::Signer;
 use ssh_agent_client_rs::Identity;
 use ssh_key::{PrivateKey, PublicKey, Signature};
+use std::path::Path;
 
 struct DummySshAgent {
     key: PrivateKey,
@@ -34,7 +36,7 @@ impl SSHAgent for DummySshAgent {
 }
 
 #[test]
-fn test_roundtrip() {
+fn test_roundtrip() -> anyhow::Result<()> {
     let agent = DummySshAgent::new();
     // Yes, it is a bit weird that compile time paths resolve from this dir but run time
     // paths resolve from the top dir. I'll come up with a better solution later.
@@ -43,5 +45,7 @@ fn test_roundtrip() {
     env_logger::builder()
         .filter_level(log::LevelFilter::Info)
         .init();
-    assert!(authenticate(auth_keys, None, agent, "").unwrap())
+    let filter = IdentityFilter::from_files(Path::new(auth_keys), None)?;
+    assert!(authenticate(&filter, agent, "")?);
+    Ok(())
 }
