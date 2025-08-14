@@ -27,13 +27,36 @@ reviewers.
 The implementation leans heavily on crates available in the Rust ecosystem that implements
 the different parts needed for the overall functionality, most notably the pam, ssh-key, 
 and ssh-agent-client-rs crates. Using upstream libraries directly is intended to make it
-easier to ensure that implementation issues with security implication gets addressed in a
-timely manner. A secondary benefit is that it is easier to support a wide range of algorithms.
+easier to ensure that implementation issues with security implications gets addressed in a
+timely manner. A secondary benefit is that it is easier to support the full set of not obviously 
+insecure algorithms.
+
+## Installation and packaging
+
+Getting this software packaged and integrated into upstream Linux distributions is an active
+goal of this project, however doing that in a way that conforms to upstream rules and conventions
+is a lot of work. If you have the ability to contribute to this work, feel free to have a look
+at the following issues:
+
+* Fedora/CentOS/Enterprise Linux packaging: https://github.com/nresare/pam-ssh-agent/issues/24
+* Ubuntu packaging: https://github.com/nresare/pam-ssh-agent/issues/54
+* Arch linux packaging: https://github.com/nresare/pam-ssh-agent/issues/50
+
+While this work is completing, feel free to use 
+https://copr.fedorainfracloud.org/coprs/noa/rust/ that has binary package for Fedora and Enterprise
+Linux derived distributions. There is also a less mature effort to package for Debian available
+at https://launchpad.net/~nresare/+archive/ubuntu/ppa.
+
+This archive also contains what is needed to build .rpm and .deb packages, Debian packages can be
+built with `debuild -b` and the top of `pam_ssh_agent.spec` contains instructions on how to build
+rpm packages.
+
+For other users, it is entirely possible to simply invoke `cargo build --release` and copy the
+resulting `target/release/libpam_ssh_agent.so` to the directory that holds your pam modules. Mine
+is in `/lib/x86_64-linux-gnu/security`.
 
 ## Usage
-
-* If you are using a debian derived operating system, use `debuild -b` to build a `.deb` package 
-  with the shared object and install it with `dpkg`
+* First, install the software using one of the methods above.
 * install `doas`, to ensure that you have a different way of elevating your privileges than sudo.
   You will need to add a `permit` line in `/etc/doas.conf` for it to work. This is not strictly
   necessary but since this is still experimental 
