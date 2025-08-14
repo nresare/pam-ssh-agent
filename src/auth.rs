@@ -50,10 +50,10 @@ pub fn authenticate(
 fn sign_and_verify(identity: Identity<'static>, agent: &mut impl SSHAgent) -> Result<bool> {
     let mut data: [u8; CHALLENGE_SIZE] = [0_u8; CHALLENGE_SIZE];
     getrandom::fill(data.as_mut_slice()).map_err(|_| anyhow!("Failed to obtain random data"))?;
-    let sig = agent.sign(identity.clone(), data.as_ref())?;
+    let sig = agent.sign(identity.clone(), &data)?;
     match identity {
-        PublicKey(key) => verify(key.key_data(), data.as_ref(), &sig)?,
-        Certificate(cert) => verify(cert.public_key(), data.as_ref(), &sig)?,
+        PublicKey(key) => verify(key.key_data(), &data, &sig)?,
+        Certificate(cert) => verify(cert.public_key(), &data, &sig)?,
     };
     Ok(true)
 }

@@ -17,15 +17,21 @@ impl IdentityFilter {
         let mut keys: HashSet<KeyData> = HashSet::new();
         let mut ca_keys: HashSet<KeyData> = HashSet::new();
 
-        for entry in
-            AuthorizedKeys::read_file(path).context(format!("Failed to read from {path:?}"))?
-        {
-            let opts = entry.config_opts();
-            if opts.iter().any(|o| o == "cert-authority") {
-                ca_keys.insert(entry.public_key().key_data().to_owned());
-            } else {
-                keys.insert(entry.public_key().key_data().to_owned());
+        if path.exists() {
+            for entry in
+                AuthorizedKeys::read_file(path).context(format!("Failed to read from {path:?}"))?
+            {
+                let opts = entry.config_opts();
+                if opts.iter().any(|o| o == "cert-authority") {
+                    ca_keys.insert(entry.public_key().key_data().to_owned());
+                } else {
+                    keys.insert(entry.public_key().key_data().to_owned());
+                }
             }
+        } else if ca_keys_file.is_none() {
+            return Err(anyhow::anyhow!(
+                "If ca_keys_file is not set, file needs to refer to an existing file"
+            ));
         }
 
         if let Some(key_path) = ca_keys_file {
@@ -88,6 +94,14 @@ mod tests {
         let filter = IdentityFilter::from_files(
             // an empty file works for our purposes
             Path::new("/dev/null"),
+            Some(Path::new(data!("ca_key.pub"))),
+        )?;
+        assert!(filter.filter(&identity));
+
+        // check that we the fact that the authorized_keys file does not exist if ca_keys_file does
+        let filter = IdentityFilter::from_files(
+            // an empty file works for our purposes
+            Path::new("/does/not/exist"),
             Some(Path::new(data!("ca_key.pub"))),
         )?;
         assert!(filter.filter(&identity));
