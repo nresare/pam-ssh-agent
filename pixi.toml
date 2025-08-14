@@ -15,11 +15,16 @@ SO_EXT = "dylib"
 [target.linux.activation.env]
 SO_EXT = "so"
 
+[target.linux-64.activation.env]
+RUSTFLAGS="-C link-arg=-Wl,--wrap=memcpy -C link-arg=$PIXI_PROJECT_ROOT/target/wrap_memcpy.o"
+
 [tasks]
 clean = "cargo clean"
-build = "cargo build --release"
+linux_fix = "true"
+build = { cmd = "cargo build --release", depends-on = ["linux_fix"] }
 
 [target.linux-64.tasks]
+linux_fix = "gcc -c -fPIC src/wrap_memcpy.c -o target/wrap_memcpy.o"
 post = { cmd = "patchelf --remove-rpath target/release/libpam_ssh_agent.$SO_EXT && strip target/release/libpam_ssh_agent.$SO_EXT", depends-on = ["build"] }
 install = { cmd = "sudo install -m644 -D target/release/libpam_ssh_agent.$SO_EXT /usr/lib64/security/pam_ssh_agent.$SO_EXT", depends-on = ["post"] }
 
