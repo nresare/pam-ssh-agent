@@ -14,6 +14,7 @@ pub use crate::agent::SSHAgent;
 pub use crate::auth::authenticate;
 use pam::constants::{PamFlag, PamResultCode};
 use pam::module::{PamHandle, PamHooks};
+use std::borrow::Cow;
 use std::env;
 use std::env::VarError;
 
@@ -78,10 +79,16 @@ fn run(args: Vec<&CStr>, pam_handle: &PamHandle) -> Result<()> {
 
 fn do_authenticate(args: &Args, handle: &PamHandle) -> Result<()> {
     let path = get_path(args)?;
+
+    let ca_keys_file_msg = match &args.ca_keys_file {
+        None => Cow::from(""),
+        Some(ca_keys_file) => Cow::from(format!(", and ca_keys from '{ca_keys_file}'")),
+    };
     info!(
-        "Authenticating using ssh-agent at '{}' and keys from '{}'",
-        path, args.file
+        "Authenticating using ssh-agent at '{}', keys from '{}'{}",
+        path, args.file, ca_keys_file_msg,
     );
+
     let ssh_agent_client = Client::connect(Path::new(path.as_str()))?;
     let filter = IdentityFilter::from_files(
         Path::new(args.file.as_str()),
