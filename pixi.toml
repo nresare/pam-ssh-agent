@@ -1,0 +1,39 @@
+[workspace]
+authors = ["Peter Bieringer <pb@bieringer.de>"]
+channels = ["conda-forge"]
+name = "pam-ssh-agent"
+platforms = ["linux-64", "osx-arm64", "osx-64"]
+version = "0.9.3"
+
+[system-requirements]
+linux  = "3.10" # CentOS 7
+libc   = { family = "glibc", version = "2.17" } # CentOS 7
+
+[target.osx.activation.env]
+SO_EXT = "dylib"
+
+[target.linux.activation.env]
+SO_EXT = "so"
+
+[target.linux-64.activation.env]
+RUSTFLAGS="-C link-arg=-Wl,--wrap=memcpy -C link-arg=$PIXI_PROJECT_ROOT/target/wrap_memcpy.o"
+
+[tasks]
+clean = "cargo clean"
+linux_fix = "true"
+build = { cmd = "cargo build --release", depends-on = ["linux_fix"] }
+
+[target.linux-64.tasks]
+linux_fix = "mkdir -p target && gcc -c -fPIC src/wrap_memcpy.c -o target/wrap_memcpy.o"
+post = { cmd = "patchelf --remove-rpath target/release/libpam_ssh_agent.$SO_EXT && strip target/release/libpam_ssh_agent.$SO_EXT", depends-on = ["build"] }
+install = { cmd = "sudo install -m644 -D target/release/libpam_ssh_agent.$SO_EXT /usr/lib64/security/pam_ssh_agent.$SO_EXT", depends-on = ["post"] }
+
+[target.osx.tasks]
+post = { cmd = "strip -x target/release/libpam_ssh_agent.$SO_EXT", depends-on = ["build"] }
+
+[dependencies]
+rust = "1.82.*"
+
+[target.linux-64.dependencies]
+pam-devel-cos7-x86_64 = "*"
+patchelf = "*"

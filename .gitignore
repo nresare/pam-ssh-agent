@@ -1,2 +1,5 @@
 /target
 /.idea/
+# pixi environments
+.pixi/*
+!.pixi/config.toml
