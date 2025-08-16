@@ -1,7 +1,9 @@
+use pam_ssh_agent::filter::IdentityFilter;
 use pam_ssh_agent::{authenticate, SSHAgent};
 use signature::Signer;
 use ssh_agent_client_rs::{Error as SACError, Identity};
 use ssh_key::{Algorithm, PrivateKey, PublicKey, Signature};
+use std::path::Path;
 
 struct DummySshAgent {
     key: PrivateKey,
@@ -53,12 +55,14 @@ impl SSHAgent for DummySshAgent {
 }
 
 #[test]
-fn test_sk_not_present() {
+fn test_sk_not_present() -> anyhow::Result<()> {
     let agent = DummySshAgent::new();
     let auth_keys = "tests/data/authorized_keys_with_sk";
 
-    // exercise an 'sk' (hardware) key being authorized, but not present.  Correct behavior is to
+    // exercise a 'sk' (hardware) key being authorized, but not present.  Correct behavior is to
     // catch the RemoteFailure SSHAgent error on the 'sk' key, and try the next key, which will
     // succeed.
-    assert!(authenticate(auth_keys, None, agent, "").unwrap())
+    let filter = IdentityFilter::from_files(Path::new(auth_keys), None)?;
+    assert!(authenticate(&filter, agent, "")?);
+    Ok(())
 }

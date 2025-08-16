@@ -1,12 +1,10 @@
 pub use crate::agent::SSHAgent;
+use crate::filter::IdentityFilter;
 use crate::verify::verify;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use log::{debug, info};
 use ssh_agent_client_rs::{Error as SACError, Identity};
-use ssh_key::public::KeyData;
-use ssh_key::{AuthorizedKeys, HashAlg};
-use std::collections::HashSet;
-use std::path::Path;
+use ssh_key::HashAlg;
 use std::time::{SystemTime, UNIX_EPOCH};
 use Identity::{Certificate, PublicKey};
 
@@ -19,13 +17,10 @@ const CHALLENGE_SIZE: usize = 32;
 /// Returns Ok(true) if a key was found and the signature was correct, Ok(false) if no
 /// key was found, and Err if agent communication or signature verification failed.
 pub fn authenticate(
-    keys_file_path: &str,
-    ca_keys_file: Option<&str>,
+    filter: &IdentityFilter,
     mut agent: impl SSHAgent,
     principal: &str,
 ) -> Result<bool> {
-    let filter =
-        IdentityFilter::from_files(Path::new(keys_file_path), ca_keys_file.map(Path::new))?;
     for identity in agent.list_identities()? {
         if filter.filter(&identity) {
             if let Certificate(cert) = &identity {
@@ -55,69 +50,12 @@ pub fn authenticate(
 fn sign_and_verify(identity: Identity<'static>, agent: &mut impl SSHAgent) -> Result<bool> {
     let mut data: [u8; CHALLENGE_SIZE] = [0_u8; CHALLENGE_SIZE];
     getrandom::fill(data.as_mut_slice()).map_err(|_| anyhow!("Failed to obtain random data"))?;
-    let sig = agent.sign(identity.clone(), data.as_ref())?;
+    let sig = agent.sign(identity.clone(), &data)?;
     match identity {
-        PublicKey(key) => verify(key.key_data(), data.as_ref(), &sig)?,
-        Certificate(cert) => verify(cert.public_key(), data.as_ref(), &sig)?,
+        PublicKey(key) => verify(key.key_data(), &data, &sig)?,
+        Certificate(cert) => verify(cert.public_key(), &data, &sig)?,
     };
     Ok(true)
-}
-
-struct IdentityFilter {
-    keys: HashSet<KeyData>,
-    ca_keys: HashSet<KeyData>,
-}
-
-impl IdentityFilter {
-    fn from_files(path: &Path, ca_keys_file: Option<&Path>) -> Result<Self> {
-        let mut keys: HashSet<KeyData> = HashSet::new();
-        let mut ca_keys: HashSet<KeyData> = HashSet::new();
-
-        for entry in
-            AuthorizedKeys::read_file(path).context(format!("Failed to read from {path:?}"))?
-        {
-            let opts = entry.config_opts();
-            if opts.iter().any(|o| o == "cert-authority") {
-                ca_keys.insert(entry.public_key().key_data().to_owned());
-            } else {
-                keys.insert(entry.public_key().key_data().to_owned());
-            }
-        }
-
-        if let Some(key_path) = ca_keys_file {
-            for entry in AuthorizedKeys::read_file(key_path)
-                .context(format!("Failed to read trusted ca keys from {key_path:?}"))?
-            {
-                ca_keys.insert(entry.public_key().key_data().to_owned());
-            }
-        }
-        Ok(IdentityFilter { keys, ca_keys })
-    }
-
-    fn filter(&self, identity: &Identity) -> bool {
-        match identity {
-            PublicKey(key) => {
-                if self.keys.contains(key.key_data()) {
-                    debug!(
-                        "found a matching key: {}",
-                        key.fingerprint(Default::default())
-                    );
-                    return true;
-                }
-            }
-            Certificate(cert) => {
-                let ca_key = cert.signature_key();
-                if self.ca_keys.contains(ca_key) {
-                    debug!(
-                        "found a matching cert-authority key: {}",
-                        ca_key.fingerprint(Default::default())
-                    );
-                    return true;
-                }
-            }
-        }
-        false
-    }
 }
 
 fn validate_cert(cert: &ssh_key::Certificate, when: SystemTime, principal: &str) -> bool {
@@ -148,43 +86,11 @@ fn validate_cert(cert: &ssh_key::Certificate, when: SystemTime, principal: &str)
 
 #[cfg(test)]
 mod test {
-    use crate::auth::{validate_cert, IdentityFilter};
+    use crate::auth::validate_cert;
+    use crate::test::{data, CERT_STR};
     use anyhow::Result;
-    use ssh_agent_client_rs::Identity;
     use ssh_key::Certificate;
-    use std::path::Path;
     use std::time::{Duration, SystemTime};
-
-    macro_rules! data {
-        ($name:expr) => {
-            concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/", $name)
-        };
-    }
-
-    #[test]
-    fn test_read_public_keys() -> Result<()> {
-        let path = Path::new(data!("authorized_keys"));
-
-        let filter = IdentityFilter::from_files(path, None)?;
-
-        // authorized_keys contains the certificate authority key for the CERT_STR cert
-        let cert = Certificate::from_openssh(CERT_STR)?;
-        let identity: Identity = cert.into();
-        assert!(filter.filter(&identity));
-
-        // verify that when using the ca_keys_file parameter, we can use he raw key and don't need
-        // the 'cert-authority ' prefix.
-        let filter = IdentityFilter::from_files(
-            // an empty file works for our purposes
-            Path::new("/dev/null"),
-            Some(Path::new(data!("ca_key.pub"))),
-        )?;
-        assert!(filter.filter(&identity));
-
-        Ok(())
-    }
-
-    const CERT_STR: &str = include_str!(data!("cert.pub"));
 
     #[test]
     fn test_parse_cert() -> Result<()> {

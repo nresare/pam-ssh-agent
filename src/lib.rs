@@ -2,19 +2,24 @@ mod agent;
 mod args;
 mod auth;
 mod expansions;
+pub mod filter;
 mod logging;
 #[cfg(feature = "native-crypto")]
 mod nativecrypto;
+#[cfg(test)]
+mod test;
 mod verify;
 
 pub use crate::agent::SSHAgent;
 pub use crate::auth::authenticate;
 use pam::constants::{PamFlag, PamResultCode};
 use pam::module::{PamHandle, PamHooks};
+use std::borrow::Cow;
 use std::env;
 use std::env::VarError;
 
 use crate::expansions::UnixEnvironment;
+use crate::filter::IdentityFilter;
 use crate::logging::init_logging;
 use anyhow::{anyhow, Result};
 use args::Args;
@@ -74,17 +79,22 @@ fn run(args: Vec<&CStr>, pam_handle: &PamHandle) -> Result<()> {
 
 fn do_authenticate(args: &Args, handle: &PamHandle) -> Result<()> {
     let path = get_path(args)?;
+
+    let ca_keys_file_msg = match &args.ca_keys_file {
+        None => Cow::from(""),
+        Some(ca_keys_file) => Cow::from(format!(", and ca_keys from '{ca_keys_file}'")),
+    };
     info!(
-        "Authenticating using ssh-agent at '{}' and keys from '{}'",
-        path, args.file
+        "Authenticating using ssh-agent at '{}', keys from '{}'{}",
+        path, args.file, ca_keys_file_msg,
     );
+
     let ssh_agent_client = Client::connect(Path::new(path.as_str()))?;
-    match authenticate(
-        args.file.as_str(),
-        args.ca_keys_file.as_deref(),
-        ssh_agent_client,
-        &get_user(handle)?,
-    )? {
+    let filter = IdentityFilter::from_files(
+        Path::new(args.file.as_str()),
+        args.ca_keys_file.as_deref().map(Path::new),
+    )?;
+    match authenticate(&filter, ssh_agent_client, &get_user(handle)?)? {
         true => Ok(()),
         false => Err(anyhow!("Agent did not know of any of the allowed keys")),
     }
