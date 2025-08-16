@@ -1,0 +1,1 @@
+target/release/pam_ssh_agent.so /lib/${DEB_HOST_MULTIARCH}/security

@@ -1,5 +1,16 @@
 #!/usr/bin/make -f
 
+RUST_VERSION=1.82
+
+export CARGO_VENDOR_DIR=vendor
+export PATH=/usr/lib/rust-$(RUST_VERSION)/bin:/usr/bin
 
 %:
-	dh $@
+	dh $@ --buildsystem cargo
+
+
+# this package is a bit special since it builds a native shared library, something
+# that the dh_cargo build tooling can not yet handle
+override_dh_auto_install:
+	cargo build --verbose --verbose --release
+	mv target/release/libpam_ssh_agent.so target/release/pam_ssh_agent.so
