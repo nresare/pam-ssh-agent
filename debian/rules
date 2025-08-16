@@ -4,9 +4,14 @@ RUST_VERSION=1.82
 
 export CARGO_VENDOR_DIR=vendor
 export PATH=/usr/lib/rust-$(RUST_VERSION)/bin:/usr/bin
+export CARGO_HOME=debian/cargo_home
 
 %:
 	dh $@ --buildsystem cargo
+
+# the cargo buildsystem do_auto_test hard codes running /usr/bin/cargo which is too old
+override_dh_auto_test:
+	cargo test --verbose --verbose
 
 
 # this package is a bit special since it builds a native shared library, something
