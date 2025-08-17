@@ -1,2 +1,4 @@
-/target
+/target/
 /.idea/
+/vendor/
+/debian/cargo_home/

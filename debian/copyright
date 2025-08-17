@@ -9,6 +9,6 @@ Files:
  Makefile
  README.*
  Cargo.*
-Copyright: 2023 Noa Resare
+Copyright: 2023-2025 The pam-ssh-agent Project Developers
 License: MIT or Apache-2.0
 
