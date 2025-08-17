@@ -1,6 +1,6 @@
 use crate::expansions::{expand_vars, Environment};
+use crate::pamext::PamHandleExt;
 use anyhow::{anyhow, Result};
-use std::borrow::Cow;
 use std::ffi::CStr;
 use std::ops::Deref;
 
@@ -27,8 +27,13 @@ impl Default for Args {
 }
 
 impl Args {
-    /// Parses args and returns an Args instance with the parsed arguments, if pam_handle
-    pub fn parse(args: Vec<&CStr>, env: Option<&dyn Environment>) -> Result<Self> {
+    /// Parses args and returns an Args instance with the parsed arguments, expanding any string
+    /// parameters according to the "Variable expansions" section in README.md
+    pub fn parse(
+        args: Vec<&CStr>,
+        env: &dyn Environment,
+        handle: &dyn PamHandleExt,
+    ) -> Result<Self> {
         let mut debug = false;
         let mut file: String = String::from(DEFAULT_AUTHORIZED_KEYS_PATH);
         let mut default_ssh_auth_sock = None;
@@ -42,10 +47,7 @@ impl Args {
             match arg.deref() {
                 "debug" => debug = true,
                 any => {
-                    let any = match env {
-                        Some(env) => expand_vars(any, env)?,
-                        None => Cow::from(any),
-                    };
+                    let any = expand_vars(any, env, handle)?;
 
                     let parts: Vec<&str> = any.splitn(2, '=').collect();
                     if parts.len() != 2 {
@@ -73,6 +75,7 @@ impl Args {
 #[cfg(test)]
 mod test {
     use crate::args::Args;
+    use crate::test::{DummyEnv, DummyHandle};
     use anyhow::Result;
     use std::ffi::{CStr, CString};
 
@@ -106,13 +109,19 @@ mod test {
     #[test]
     fn test_parse() -> Result<()> {
         let expected = Args::default();
-        assert_eq!(expected, Args::parse(args!().refs(), None)?);
+        assert_eq!(
+            expected,
+            Args::parse(args!().refs(), &DummyEnv, &DummyHandle)?
+        );
 
         let expected = Args {
             debug: true,
             ..Default::default()
         };
-        assert_eq!(expected, Args::parse(args!("debug").refs(), None)?);
+        assert_eq!(
+            expected,
+            Args::parse(args!("debug").refs(), &DummyEnv, &DummyHandle)?
+        );
 
         let expected = Args {
             debug: true,
@@ -121,7 +130,11 @@ mod test {
         };
         assert_eq!(
             expected,
-            Args::parse(args!("debug", "file=/dev/null").refs(), None)?,
+            Args::parse(
+                args!("debug", "file=/dev/null").refs(),
+                &DummyEnv,
+                &DummyHandle
+            )?,
         );
 
         let expected = Args {
@@ -132,20 +145,21 @@ mod test {
             expected,
             Args::parse(
                 args!("default_ssh_auth_sock=/var/run/ssh_agent.sock").refs(),
-                None
+                &DummyEnv,
+                &DummyHandle
             )?
         );
 
         assert_eq!(
             "Could not split 'unknown' using '='",
-            Args::parse(args!("unknown").refs(), None)
+            Args::parse(args!("unknown").refs(), &DummyEnv, &DummyHandle)
                 .unwrap_err()
                 .to_string(),
         );
 
         assert_eq!(
             "Unknown parameter key 'bad_key'",
-            Args::parse(args!("bad_key=value").refs(), None)
+            Args::parse(args!("bad_key=value").refs(), &DummyEnv, &DummyHandle)
                 .unwrap_err()
                 .to_string(),
         );

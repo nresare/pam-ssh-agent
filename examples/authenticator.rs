@@ -15,7 +15,7 @@ fn main() -> Result<()> {
     env_logger::builder()
         .filter_level(log::LevelFilter::Info)
         .init();
-    let filter = IdentityFilter::from_files(Path::new(authorized_keys_path.as_str()), None)?;
+    let filter = IdentityFilter::new(Path::new(authorized_keys_path.as_str()), None)?;
     let result = authenticate(&filter, client, "")?;
     if result {
         info!("the ssh agent at {path} signed a random message as validated by {authorized_keys_path}");

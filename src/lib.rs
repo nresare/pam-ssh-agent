@@ -6,6 +6,7 @@ pub mod filter;
 mod logging;
 #[cfg(feature = "native-crypto")]
 mod nativecrypto;
+mod pamext;
 #[cfg(test)]
 mod test;
 mod verify;
@@ -21,10 +22,10 @@ use std::env::VarError;
 use crate::expansions::UnixEnvironment;
 use crate::filter::IdentityFilter;
 use crate::logging::init_logging;
+use crate::pamext::PamHandleExt;
 use anyhow::{anyhow, Result};
 use args::Args;
 use log::{error, info};
-use pam::items::{Service, User};
 use ssh_agent_client_rs::Client;
 use std::ffi::CStr;
 use std::path::Path;
@@ -68,8 +69,8 @@ impl PamHooks for PamSshAgent {
 }
 
 fn run(args: Vec<&CStr>, pam_handle: &PamHandle) -> Result<()> {
-    init_logging(get_service(pam_handle))?;
-    let args = Args::parse(args, Some(&UnixEnvironment::new(pam_handle)))?;
+    init_logging(pam_handle.get_service().unwrap_or("unknown".into()).into())?;
+    let args = Args::parse(args, &UnixEnvironment, pam_handle)?;
     if args.debug {
         log::set_max_level(log::LevelFilter::Debug);
     }
@@ -90,11 +91,11 @@ fn do_authenticate(args: &Args, handle: &PamHandle) -> Result<()> {
     );
 
     let ssh_agent_client = Client::connect(Path::new(path.as_str()))?;
-    let filter = IdentityFilter::from_files(
+    let filter = IdentityFilter::new(
         Path::new(args.file.as_str()),
         args.ca_keys_file.as_deref().map(Path::new),
     )?;
-    match authenticate(&filter, ssh_agent_client, &get_user(handle)?)? {
+    match authenticate(&filter, ssh_agent_client, &handle.get_calling_user()?)? {
         true => Ok(()),
         false => Err(anyhow!("Agent did not know of any of the allowed keys")),
     }
@@ -115,24 +116,4 @@ fn get_path(args: &Args) -> Result<String> {
             "SSH_AUTH_SOCK not set and the default_ssh_auth_sock parameter is not set"
         )),
     }
-}
-
-/// Fetch the name of the current service, i.e. the software that uses pam for authentication
-/// using the PamHandle::get_item() method.
-fn get_service(pam_handle: &PamHandle) -> String {
-    let service = match pam_handle.get_item::<Service>() {
-        Ok(Some(service)) => service,
-        _ => return "unknown".into(),
-    };
-    String::from_utf8_lossy(service.0.to_bytes()).to_string()
-}
-
-/// Fetch the name of the current service, i.e. the software that uses pam for authentication
-/// using the PamHandle::get_item() method.
-fn get_user(pam_handle: &PamHandle) -> Result<String> {
-    let service = match pam_handle.get_item::<User>() {
-        Ok(Some(user)) => user,
-        _ => return Err(anyhow!("Failed to get user")),
-    };
-    Ok(String::from_utf8_lossy(service.0.to_bytes()).to_string())
 }
