@@ -110,10 +110,10 @@ management systems, it might make more sense to move the complexity of using the
 to those systems, but these variable expansions are available to uses that might want them to provide a smooth upgrade
 path from `pam_ssh_agent_auth`.
 
-* `~` same as in shells, without specifying a username this expands to the home directory referred to by `PAM_RUSER`, 
+* `~` same as in shells, without specifying a username this expands to the home directory referred to by `PAM_USER`, 
   normally the user attempting to authenticate. If a username is specified, the home directory of that user will be
   used such that `~alice` might expand to `/home/alice`
-* `%h` same as `~`, the home directory of the user referred to by the PAM item `PAM_RUSER`
+* `%h` same as `~`, the home directory of the user referred to by the PAM item `PAM_USER`
 * `%H` the value returned by `gethostname(3)`, truncated after the first period such that if `gethostname(3)` returns
   `host.example.com` this `%H` will turn into `host`
 * `%f` the value returned by `gethostname(3)`. For the systems I have looked at, this value is not a fully qualified
