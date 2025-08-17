@@ -13,7 +13,7 @@ pub struct IdentityFilter {
 }
 
 impl IdentityFilter {
-    pub fn from_files(path: &Path, ca_keys_file: Option<&Path>) -> anyhow::Result<Self> {
+    pub fn new(path: &Path, ca_keys_file: Option<&Path>) -> anyhow::Result<Self> {
         let mut keys: HashSet<KeyData> = HashSet::new();
         let mut ca_keys: HashSet<KeyData> = HashSet::new();
 
@@ -82,7 +82,7 @@ mod tests {
     fn test_read_public_keys() -> anyhow::Result<()> {
         let path = Path::new(data!("authorized_keys"));
 
-        let filter = IdentityFilter::from_files(path, None)?;
+        let filter = IdentityFilter::new(path, None)?;
 
         // authorized_keys contains the certificate authority key for the CERT_STR cert
         let cert = Certificate::from_openssh(CERT_STR)?;
@@ -91,7 +91,7 @@ mod tests {
 
         // verify that when using the ca_keys_file parameter, we can use he raw key and don't need
         // the 'cert-authority ' prefix.
-        let filter = IdentityFilter::from_files(
+        let filter = IdentityFilter::new(
             // an empty file works for our purposes
             Path::new("/dev/null"),
             Some(Path::new(data!("ca_key.pub"))),
@@ -99,7 +99,7 @@ mod tests {
         assert!(filter.filter(&identity));
 
         // check that we the fact that the authorized_keys file does not exist if ca_keys_file does
-        let filter = IdentityFilter::from_files(
+        let filter = IdentityFilter::new(
             // an empty file works for our purposes
             Path::new("/does/not/exist"),
             Some(Path::new(data!("ca_key.pub"))),

@@ -1,2 +1,0 @@
-use pam::module::PamHandle;
-
