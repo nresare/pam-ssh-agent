@@ -17,21 +17,55 @@ use std::collections::VecDeque;
 
 pub(crate) const CERT_STR: &str = include_str!(data!("cert.pub"));
 
-pub struct CannedEnv {
-    answers: RefCell<VecDeque<&'static str>>,
+macro_rules! canned {
+    ($name:ident) => {
+        pub struct $name {
+            answers: RefCell<VecDeque<&'static str>>,
+        }
+
+        impl $name {
+            pub(crate) fn new(answers: Vec<&'static str>) -> Self {
+                $name {
+                    answers: RefCell::new(VecDeque::from(answers)),
+                }
+            }
+
+            fn answer(&'_ self) -> anyhow::Result<Cow<'_, str>> {
+                Ok(Cow::from(
+                    self.answers.borrow_mut().pop_front().unwrap().to_string(),
+                ))
+            }
+        }
+    };
 }
 
-impl CannedEnv {
-    pub(crate) fn new(answers: Vec<&'static str>) -> Self {
-        CannedEnv {
-            answers: RefCell::new(VecDeque::from(answers)),
-        }
+canned!(CannedEnv);
+impl Environment for CannedEnv {
+    fn get_homedir(&'_ self, _user: &str) -> anyhow::Result<Cow<'_, str>> {
+        self.answer()
     }
 
-    fn answer(&'_ self) -> anyhow::Result<Cow<'_, str>> {
-        Ok(Cow::from(
-            self.answers.borrow_mut().pop_front().unwrap().to_string(),
-        ))
+    fn get_hostname(&'_ self) -> anyhow::Result<Cow<'_, str>> {
+        self.answer()
+    }
+
+    fn get_fqdn(&'_ self) -> anyhow::Result<Cow<'_, str>> {
+        self.answer()
+    }
+
+    fn get_uid(&'_ self, _user: &str) -> anyhow::Result<Cow<'_, str>> {
+        self.answer()
+    }
+}
+
+canned!(CannedHandler);
+impl PamHandleExt for CannedHandler {
+    fn get_calling_user(&self) -> anyhow::Result<Cow<'_, str>> {
+        self.answer()
+    }
+
+    fn get_service(&self) -> anyhow::Result<Cow<'_, str>> {
+        self.answer()
     }
 }
 
@@ -55,24 +89,6 @@ impl Environment for DummyEnv {
     }
 }
 
-impl Environment for CannedEnv {
-    fn get_homedir(&'_ self, _user: &str) -> anyhow::Result<Cow<'_, str>> {
-        self.answer()
-    }
-
-    fn get_hostname(&'_ self) -> anyhow::Result<Cow<'_, str>> {
-        self.answer()
-    }
-
-    fn get_fqdn(&'_ self) -> anyhow::Result<Cow<'_, str>> {
-        self.answer()
-    }
-
-    fn get_uid(&'_ self, _user: &str) -> anyhow::Result<Cow<'_, str>> {
-        self.answer()
-    }
-}
-
 pub struct DummyHandle;
 
 impl PamHandleExt for DummyHandle {
@@ -82,33 +98,5 @@ impl PamHandleExt for DummyHandle {
 
     fn get_service(&self) -> anyhow::Result<Cow<'_, str>> {
         panic!()
-    }
-}
-
-pub struct CannedHandler {
-    answers: RefCell<VecDeque<&'static str>>,
-}
-
-impl PamHandleExt for CannedHandler {
-    fn get_calling_user(&self) -> anyhow::Result<Cow<'_, str>> {
-        self.answer()
-    }
-
-    fn get_service(&self) -> anyhow::Result<Cow<'_, str>> {
-        self.answer()
-    }
-}
-
-impl CannedHandler {
-    pub(crate) fn new(answers: Vec<&'static str>) -> Self {
-        CannedHandler {
-            answers: RefCell::new(VecDeque::from(answers)),
-        }
-    }
-
-    fn answer(&'_ self) -> anyhow::Result<Cow<'_, str>> {
-        Ok(Cow::from(
-            self.answers.borrow_mut().pop_front().unwrap().to_string(),
-        ))
     }
 }
