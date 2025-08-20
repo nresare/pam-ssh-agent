@@ -1,47 +1,51 @@
-use anyhow::Context;
-use log::debug;
+use anyhow::anyhow;
+use anyhow::Result;
+use log::{debug, info};
 use ssh_agent_client_rs::Identity;
 use ssh_agent_client_rs::Identity::{Certificate, PublicKey};
 use ssh_key::public::KeyData;
 use ssh_key::AuthorizedKeys;
 use std::collections::HashSet;
+use std::fs;
 use std::path::Path;
 
+/// An IdentityFilter can determine if an Identity provided by the ssh-agent is trusted or not
+/// by this plugin. It is constructed from files containing regular ssh keys or cert-authority keys.
 pub struct IdentityFilter {
     keys: HashSet<KeyData>,
     ca_keys: HashSet<KeyData>,
 }
 
 impl IdentityFilter {
-    pub fn new(path: &Path, ca_keys_file: Option<&Path>) -> anyhow::Result<Self> {
+    /// Construct a new Identity filter where path is the path to a file in authorized_keys
+    /// format, and the ca_keys_file is an optional path to a file containing cert-authority
+    /// keys. See README.md for the details on those keys.
+    pub fn new(path: &Path, ca_keys_file: Option<&Path>) -> Result<Self> {
+        let mut identities = Vec::new();
+        if path.exists() {
+            identities.extend(from_file(path, false)?);
+        } else if ca_keys_file.is_none() {
+            info!("No valid keys for authentication, {path:?} does not exist");
+        }
+
+        if let Some(ca_keys_file) = ca_keys_file {
+            identities.extend(from_file(ca_keys_file, true)?);
+        }
+        Self::from(identities)
+    }
+
+    fn from(authorized: Vec<Authorized>) -> Result<Self> {
         let mut keys: HashSet<KeyData> = HashSet::new();
         let mut ca_keys: HashSet<KeyData> = HashSet::new();
 
-        if path.exists() {
-            for entry in
-                AuthorizedKeys::read_file(path).context(format!("Failed to read from {path:?}"))?
-            {
-                let opts = entry.config_opts();
-                if opts.iter().any(|o| o == "cert-authority") {
-                    ca_keys.insert(entry.public_key().key_data().to_owned());
-                } else {
-                    keys.insert(entry.public_key().key_data().to_owned());
-                }
-            }
-        } else if ca_keys_file.is_none() {
-            return Err(anyhow::anyhow!(
-                "If ca_keys_file is not set, file needs to refer to an existing file"
-            ));
+        for item in authorized {
+            match item {
+                Authorized::Key(key) => keys.insert(key),
+                Authorized::CAKey(ca_key) => ca_keys.insert(ca_key),
+            };
         }
 
-        if let Some(key_path) = ca_keys_file {
-            for entry in AuthorizedKeys::read_file(key_path)
-                .context(format!("Failed to read trusted ca keys from {key_path:?}"))?
-            {
-                ca_keys.insert(entry.public_key().key_data().to_owned());
-            }
-        }
-        Ok(IdentityFilter { keys, ca_keys })
+        Ok(Self { keys, ca_keys })
     }
 
     pub fn filter(&self, identity: &Identity) -> bool {
@@ -68,6 +72,38 @@ impl IdentityFilter {
         }
         false
     }
+}
+
+enum Authorized {
+    Key(KeyData),
+    CAKey(KeyData),
+}
+
+fn from_file(filename: &Path, ca_keys: bool) -> Result<Vec<Authorized>> {
+    let contents = fs::read_to_string(filename)?;
+    from_str(
+        &contents,
+        filename.to_str().ok_or(anyhow!("invalid filename"))?,
+        ca_keys,
+    )
+}
+
+fn from_str(buf: &str, what: &str, ca_keys: bool) -> Result<Vec<Authorized>> {
+    let keys: AuthorizedKeys = AuthorizedKeys::new(buf);
+    let iter = keys.enumerate().filter_map(move |(i, ak)| match ak {
+        Ok(entry) => {
+            let key_data = entry.public_key().key_data().to_owned();
+            if !ca_keys && !entry.config_opts().iter().any(|o| o == "cert-authority") {
+                return Some(Authorized::Key(key_data));
+            }
+            Some(Authorized::CAKey(key_data))
+        }
+        Err(e) => {
+            info!("Failed to parse line {what}:{i}': {e}");
+            None
+        }
+    });
+    Ok(iter.collect())
 }
 
 #[cfg(test)]
