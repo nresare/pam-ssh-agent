@@ -1,53 +1,7 @@
+use crate::environment::Environment;
 use crate::pamext::PamHandleExt;
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use std::borrow::Cow;
-use uzers::get_user_by_name;
-use uzers::os::unix::UserExt;
-
-pub trait Environment {
-    fn get_homedir(&'_ self, user: &str) -> Result<Cow<'_, str>>;
-
-    fn get_hostname(&'_ self) -> Result<Cow<'_, str>>;
-
-    fn get_fqdn(&'_ self) -> Result<Cow<'_, str>>;
-
-    fn get_uid(&'_ self, user: &str) -> Result<Cow<'_, str>>;
-}
-
-pub struct UnixEnvironment;
-
-impl Environment for UnixEnvironment {
-    fn get_homedir(&'_ self, user: &str) -> Result<Cow<'_, str>> {
-        match get_user_by_name(user) {
-            Some(user) => Ok(Cow::Owned(user.home_dir().to_string_lossy().to_string())),
-            None => Err(anyhow!("homedir for {} not found", user)),
-        }
-    }
-
-    fn get_hostname(&'_ self) -> Result<Cow<'_, str>> {
-        let hostname = get_hostname()?;
-        let hostname = hostname
-            .split('.')
-            .next()
-            .ok_or_else(|| anyhow!("Empty hostname"))?;
-        Ok(Cow::from(hostname.to_string()))
-    }
-
-    fn get_fqdn(&'_ self) -> Result<Cow<'_, str>> {
-        Ok(Cow::from(get_hostname()?))
-    }
-
-    fn get_uid(&'_ self, user: &str) -> Result<Cow<'_, str>> {
-        let user = get_user_by_name(&user)
-            .ok_or_else(|| anyhow!("Failed to look up user with username {}", user))?;
-        Ok(Cow::from(user.uid().to_string()))
-    }
-}
-
-fn get_hostname() -> Result<String> {
-    let result = hostname::get().map_err(|e| anyhow!("Failed to obtain hostname: {}", e))?;
-    Ok(result.to_string_lossy().to_string())
-}
 
 pub fn expand_vars<'a>(
     input: &'a str,
@@ -69,7 +23,11 @@ pub fn expand_vars<'a>(
     input = expand_var(input, "%H", || env.get_hostname())?;
     input = expand_var(input, "%u", || pam_handle.get_calling_user())?;
     input = expand_var(input, "%f", || env.get_fqdn())?;
-    input = expand_var(input, "%U", || env.get_uid(&pam_handle.get_calling_user()?))?;
+    input = expand_var(input, "%U", || {
+        Ok(Cow::from(
+            env.get_uid(&pam_handle.get_calling_user()?)?.to_string(),
+        ))
+    })?;
     Ok(input)
 }
 

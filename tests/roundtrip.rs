@@ -45,7 +45,7 @@ fn test_roundtrip() -> anyhow::Result<()> {
     env_logger::builder()
         .filter_level(log::LevelFilter::Info)
         .init();
-    let filter = IdentityFilter::new(Path::new(auth_keys), None)?;
+    let filter = IdentityFilter::from_authorized_file(Path::new(auth_keys))?;
     assert!(authenticate(&filter, agent, "")?);
     Ok(())
 }

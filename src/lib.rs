@@ -1,6 +1,8 @@
 mod agent;
 mod args;
 mod auth;
+mod cmd;
+mod environment;
 mod expansions;
 pub mod filter;
 mod logging;
@@ -19,7 +21,7 @@ use std::borrow::Cow;
 use std::env;
 use std::env::VarError;
 
-use crate::expansions::UnixEnvironment;
+use crate::environment::UnixEnvironment;
 use crate::filter::IdentityFilter;
 use crate::logging::init_logging;
 use crate::pamext::PamHandleExt;
@@ -91,9 +93,13 @@ fn do_authenticate(args: &Args, handle: &PamHandle) -> Result<()> {
     );
 
     let ssh_agent_client = Client::connect(Path::new(path.as_str()))?;
+
     let filter = IdentityFilter::new(
         Path::new(args.file.as_str()),
         args.ca_keys_file.as_deref().map(Path::new),
+        args.authorized_keys_command.as_deref(),
+        args.authorized_keys_command_user.as_deref(),
+        &handle.get_calling_user()?,
     )?;
     match authenticate(&filter, ssh_agent_client, &handle.get_calling_user()?)? {
         true => Ok(()),
