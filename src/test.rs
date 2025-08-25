@@ -8,12 +8,13 @@ macro_rules! data {
     };
 }
 
-use crate::expansions::Environment;
+use crate::environment::Environment;
 use crate::pamext::PamHandleExt;
 pub(crate) use data;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::VecDeque;
+use uzers::uid_t;
 
 pub(crate) const CERT_STR: &str = include_str!(data!("cert.pub"));
 
@@ -53,8 +54,8 @@ impl Environment for CannedEnv {
         self.answer()
     }
 
-    fn get_uid(&'_ self, _user: &str) -> anyhow::Result<Cow<'_, str>> {
-        self.answer()
+    fn get_uid(&'_ self, _user: &str) -> anyhow::Result<uid_t> {
+        panic!()
     }
 }
 
@@ -84,7 +85,7 @@ impl Environment for DummyEnv {
         panic!()
     }
 
-    fn get_uid(&'_ self, _user: &str) -> anyhow::Result<Cow<'_, str>> {
+    fn get_uid(&'_ self, _user: &str) -> anyhow::Result<uid_t> {
         panic!()
     }
 }

@@ -1,3 +1,5 @@
+use crate::cmd;
+use crate::environment::get_uid;
 use anyhow::anyhow;
 use anyhow::Result;
 use log::{debug, info};
@@ -8,6 +10,8 @@ use ssh_key::AuthorizedKeys;
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
+use std::time::Duration;
+use uzers::uid_t;
 
 /// An IdentityFilter can determine if an Identity provided by the ssh-agent is trusted or not
 /// by this plugin. It is constructed from files containing regular ssh keys or cert-authority keys.
@@ -20,18 +24,33 @@ impl IdentityFilter {
     /// Construct a new Identity filter where path is the path to a file in authorized_keys
     /// format, and the ca_keys_file is an optional path to a file containing cert-authority
     /// keys. See README.md for the details on those keys.
-    pub fn new(path: &Path, ca_keys_file: Option<&Path>) -> Result<Self> {
+    pub fn new(
+        authorized_keys_file: &Path,
+        ca_keys_file: Option<&Path>,
+        authorized_keys_command: Option<&str>,
+        authorized_keys_command_user: Option<&str>,
+        calling_user: &str,
+    ) -> Result<Self> {
         let mut identities = Vec::new();
-        if path.exists() {
-            identities.extend(from_file(path, false)?);
+        if authorized_keys_file.exists() {
+            identities.extend(from_file(authorized_keys_file, false)?);
         } else if ca_keys_file.is_none() {
-            info!("No valid keys for authentication, {path:?} does not exist");
+            info!("No valid keys for authentication, {authorized_keys_file:?} does not exist");
         }
 
         if let Some(ca_keys_file) = ca_keys_file {
             identities.extend(from_file(ca_keys_file, true)?);
         }
+
+        if let Some(cmd) = authorized_keys_command {
+            let user = authorized_keys_command_user.map(get_uid).transpose()?;
+            identities.extend(from_command(cmd, user, calling_user)?);
+        }
         Self::from(identities)
+    }
+
+    pub fn from_authorized_file(authorized_keys_file: &Path) -> Result<Self> {
+        Self::new(authorized_keys_file, None, None, None, "")
     }
 
     fn from(authorized: Vec<Authorized>) -> Result<Self> {
@@ -79,6 +98,11 @@ enum Authorized {
     CAKey(KeyData),
 }
 
+fn from_command(command: &str, uid: Option<uid_t>, arg: &str) -> Result<Vec<Authorized>> {
+    let buf = cmd::run(&[command, arg], Duration::from_secs(10), uid)?;
+    from_str(&buf, &format!("{command}:(output):"), false)
+}
+
 fn from_file(filename: &Path, ca_keys: bool) -> Result<Vec<Authorized>> {
     let contents = fs::read_to_string(filename)?;
     from_str(
@@ -118,7 +142,7 @@ mod tests {
     fn test_read_public_keys() -> anyhow::Result<()> {
         let path = Path::new(data!("authorized_keys"));
 
-        let filter = IdentityFilter::new(path, None)?;
+        let filter = IdentityFilter::from_authorized_file(path)?;
 
         // authorized_keys contains the certificate authority key for the CERT_STR cert
         let cert = Certificate::from_openssh(CERT_STR)?;
@@ -131,6 +155,9 @@ mod tests {
             // an empty file works for our purposes
             Path::new("/dev/null"),
             Some(Path::new(data!("ca_key.pub"))),
+            None,
+            None,
+            "",
         )?;
         assert!(filter.filter(&identity));
 
@@ -139,6 +166,9 @@ mod tests {
             // an empty file works for our purposes
             Path::new("/does/not/exist"),
             Some(Path::new(data!("ca_key.pub"))),
+            None,
+            None,
+            "",
         )?;
         assert!(filter.filter(&identity));
 

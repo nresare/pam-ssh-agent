@@ -62,7 +62,7 @@ fn test_sk_not_present() -> anyhow::Result<()> {
     // exercise a 'sk' (hardware) key being authorized, but not present.  Correct behavior is to
     // catch the RemoteFailure SSHAgent error on the 'sk' key, and try the next key, which will
     // succeed.
-    let filter = IdentityFilter::new(Path::new(auth_keys), None)?;
+    let filter = IdentityFilter::from_authorized_file(Path::new(auth_keys))?;
     assert!(authenticate(&filter, agent, "")?);
     Ok(())
 }

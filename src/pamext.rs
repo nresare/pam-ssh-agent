@@ -19,9 +19,7 @@ macro_rules! get_item {
                 .get_item::<$type>()
                 .unwrap()
                 .ok_or(anyhow!("Could not get_item {}", stringify!($type)))?;
-            Ok(String::from_utf8_lossy(service.0.to_bytes())
-                .to_string()
-                .into())
+            Ok(String::from_utf8(service.0.to_bytes().to_vec())?.into())
         }
     };
 }
