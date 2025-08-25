@@ -1,6 +1,8 @@
 mod agent;
 mod args;
 mod auth;
+mod cmd;
+mod environment;
 mod expansions;
 pub mod filter;
 mod logging;
@@ -15,11 +17,10 @@ pub use crate::agent::SSHAgent;
 pub use crate::auth::authenticate;
 use pam::constants::{PamFlag, PamResultCode};
 use pam::module::{PamHandle, PamHooks};
-use std::borrow::Cow;
 use std::env;
 use std::env::VarError;
 
-use crate::expansions::UnixEnvironment;
+use crate::environment::UnixEnvironment;
 use crate::filter::IdentityFilter;
 use crate::logging::init_logging;
 use crate::pamext::PamHandleExt;
@@ -81,19 +82,28 @@ fn run(args: Vec<&CStr>, pam_handle: &PamHandle) -> Result<()> {
 fn do_authenticate(args: &Args, handle: &PamHandle) -> Result<()> {
     let path = get_path(args)?;
 
-    let ca_keys_file_msg = match &args.ca_keys_file {
-        None => Cow::from(""),
-        Some(ca_keys_file) => Cow::from(format!(", and ca_keys from '{ca_keys_file}'")),
-    };
     info!(
-        "Authenticating using ssh-agent at '{}', keys from '{}'{}",
-        path, args.file, ca_keys_file_msg,
+        "Authenticating using ssh-agent at '{}', keys from {}",
+        path, args.file,
     );
+    if Path::new(&args.file).exists() {
+        info!("authorized keys from '{}'", &args.file);
+    }
+    if let Some(ca_keys_file) = &args.ca_keys_file {
+        info!("ca_keys from '{ca_keys_file}'");
+    };
+    if let Some(authorized_keys_command) = &args.authorized_keys_command {
+        info!("authorized_keys returned from '{authorized_keys_command}'");
+    }
 
     let ssh_agent_client = Client::connect(Path::new(path.as_str()))?;
+
     let filter = IdentityFilter::new(
         Path::new(args.file.as_str()),
         args.ca_keys_file.as_deref().map(Path::new),
+        args.authorized_keys_command.as_deref(),
+        args.authorized_keys_command_user.as_deref(),
+        &handle.get_calling_user()?,
     )?;
     match authenticate(&filter, ssh_agent_client, &handle.get_calling_user()?)? {
         true => Ok(()),

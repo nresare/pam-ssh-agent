@@ -1,4 +1,5 @@
-use crate::expansions::{expand_vars, Environment};
+use crate::environment::Environment;
+use crate::expansions::expand_vars;
 use crate::pamext::PamHandleExt;
 use anyhow::{anyhow, Result};
 use std::ffi::CStr;
@@ -13,6 +14,8 @@ pub struct Args {
     pub file: String,
     pub default_ssh_auth_sock: Option<String>,
     pub ca_keys_file: Option<String>,
+    pub authorized_keys_command: Option<String>,
+    pub authorized_keys_command_user: Option<String>,
 }
 
 impl Default for Args {
@@ -22,6 +25,8 @@ impl Default for Args {
             file: String::from(DEFAULT_AUTHORIZED_KEYS_PATH),
             default_ssh_auth_sock: None,
             ca_keys_file: None,
+            authorized_keys_command: None,
+            authorized_keys_command_user: None,
         }
     }
 }
@@ -38,6 +43,8 @@ impl Args {
         let mut file: String = String::from(DEFAULT_AUTHORIZED_KEYS_PATH);
         let mut default_ssh_auth_sock = None;
         let mut ca_keys_file: Option<String> = None;
+        let mut authorized_keys_command: Option<String> = None;
+        let mut authorized_keys_command_user: Option<String> = None;
 
         for arg in args
             .iter()
@@ -55,9 +62,13 @@ impl Args {
                     }
                     let (key, value) = (parts[0], parts[1]);
                     match key {
-                        "file" => file = value.to_string(),
-                        "default_ssh_auth_sock" => default_ssh_auth_sock = Some(value.to_string()),
-                        "ca_keys_file" => ca_keys_file = Some(value.to_string()),
+                        "file" => file = value.into(),
+                        "default_ssh_auth_sock" => default_ssh_auth_sock = Some(value.into()),
+                        "ca_keys_file" => ca_keys_file = Some(value.into()),
+                        "authorized_keys_command" => authorized_keys_command = Some(value.into()),
+                        "authorized_keys_command_user" => {
+                            authorized_keys_command_user = Some(value.into())
+                        }
                         _ => return Err(anyhow!("Unknown parameter key '{key}'")),
                     }
                 }
@@ -68,6 +79,8 @@ impl Args {
             file,
             default_ssh_auth_sock,
             ca_keys_file,
+            authorized_keys_command,
+            authorized_keys_command_user,
         })
     }
 }
@@ -145,6 +158,23 @@ mod test {
             expected,
             Args::parse(
                 args!("default_ssh_auth_sock=/var/run/ssh_agent.sock").refs(),
+                &DummyEnv,
+                &DummyHandle
+            )?
+        );
+        let expected = Args {
+            authorized_keys_command: Some("/usr/bin/sss_ssh_authorizedkeys".into()),
+            authorized_keys_command_user: Some("nobody".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            expected,
+            Args::parse(
+                args!(
+                    "authorized_keys_command=/usr/bin/sss_ssh_authorizedkeys",
+                    "authorized_keys_command_user=nobody"
+                )
+                .refs(),
                 &DummyEnv,
                 &DummyHandle
             )?
