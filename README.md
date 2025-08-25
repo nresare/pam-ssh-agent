@@ -70,16 +70,23 @@ is in `/lib/x86_64-linux-gnu/security`.
 ## Configuration options
 
 PAM modules can be configured using space separated options after `pam_ssh_agent.so` in the applicable
-configuration file in `/etc/pam.d`. pam_ssh_agent currently understands the following options
+configuration file in `/etc/pam.d`. pam_ssh_agent currently understands the following options:
 
-* `debug` This will increase log output to the AUTHPRIV syslog facility
-* `file=/file/name` This will modify the file holding the authorized public keys instead of the
-  default `/etc/security/authorized_keys`. This path is subject to the variable expansions mentioned below
-* `ca_keys_file=/ca/keys/filename`. The file at this path, if specified, will be expected to contain lines with
-  ssh keys that are considered trusted certificate authority keys. See below for further information
-  about certificate authentication and the subtle format difference in file format compared to `file`
+* `debug` Increase log output to the AUTHPRIV syslog facility.
+* `file=/file/name` Override/modify the file from which authorized public keys are read. If not
+  specified, the default is `/etc/security/authorized_keys`. This path is subject to the variable
+  expansions mentioned below.
+* `ca_keys_file=/ca/keys/filename`. Read trusted certificate authorities from a file that doesn't
+  include any key options prefixes. See below for further information about certificate
+  authentication and the subtle format difference in file format compared to `file`.
+* `authorized_keys_command=/path/executable` Specify a command that should be run to dynamically
+  retrieve/prepare a list of authorized public keys. The command will be passed a single argument
+  containing the username of the user requesting authentication. The command should print keys to
+  STDOUT in authorized_keys format.
+* `autorizxed_keys_command_user=NON_PRIVILEGED_USER` If set, specifies the user that `authorized_keys_command`
+  will be executed as. If not specified, the command will be run as the requesting user.
 * `default_ssh_auth_sock=/path/to/ssh_agent_unix_socket` the path to use if the `SSH_AUTH_SOCKET` is not
-  set
+  set.
 
 ## SSH Certificates
 
@@ -98,7 +105,7 @@ that the key is prefixed with `cert-authority` followed by a space and the key i
 The second way to specify certificate authority keys work in the same way as the OpenSSH option `TrustedUserCAKeys`
 where keys without the `cert-authority` option are specified, one per line. To enable this mode of operation,
 set the `ca_keys_file` option.
-  
+
 ## Variable expansions
 
 > :warning: Using the home directory expansion is unsafe. It allows an attacker with access to an account with sudo
@@ -107,20 +114,20 @@ set the `ca_keys_file` option.
 
 It is possible to use variable expansion in any of the configuration options. In the current age of configuration
 management systems, it might make more sense to move the complexity of using the right `authorized_keys` file 
-to those systems, but these variable expansions are available to uses that might want them to provide a smooth upgrade
-path from `pam_ssh_agent_auth`.
+to those systems, but these variable expansions are available to users that might want them. It also makes the 
+upgrade path from `pam_ssh_agent_auth` smoother as the previous functionality is retained.
 
 * `~` same as in shells, without specifying a username this expands to the home directory referred to by `PAM_USER`, 
   normally the user attempting to authenticate. If a username is specified, the home directory of that user will be
-  used such that `~alice` might expand to `/home/alice`
-* `%h` same as `~`, the home directory of the user referred to by the PAM item `PAM_USER`
+  used such that `~alice` might expand to `/home/alice`.
+* `%h` same as `~`, the home directory of the user referred to by the PAM item `PAM_USER`.
 * `%H` the value returned by `gethostname(3)`, truncated after the first period such that if `gethostname(3)` returns
-  `host.example.com` this `%H` will turn into `host`
+  `host.example.com` this `%H` will turn into `host`.
 * `%f` the value returned by `gethostname(3)`. For the systems I have looked at, this value is not a fully qualified
   domain name but if it was it would be returned. This behaviour, although a bit surprising is consistent with how
-  `pam_ssh_agent_auth` works
-* `%u` the username of the user attempting to authenticate
-* `%U` numeric uid of the user attempting to authenticate
+  `pam_ssh_agent_auth` works.
+* `%u` the username of the user attempting to authenticate.
+* `%U` numeric uid of the user attempting to authenticate.
 
 ## The `native-crypto` feature
 
