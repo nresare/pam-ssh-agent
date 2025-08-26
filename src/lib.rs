@@ -82,10 +82,7 @@ fn run(args: Vec<&CStr>, pam_handle: &PamHandle) -> Result<()> {
 fn do_authenticate(args: &Args, handle: &PamHandle) -> Result<()> {
     let path = get_path(args)?;
 
-    info!(
-        "Authenticating using ssh-agent at '{}', keys from {}",
-        path, args.file,
-    );
+    info!("Authenticating using ssh-agent at '{path}'");
     if Path::new(&args.file).exists() {
         info!("authorized keys from '{}'", &args.file);
     }
@@ -93,7 +90,7 @@ fn do_authenticate(args: &Args, handle: &PamHandle) -> Result<()> {
         info!("ca_keys from '{ca_keys_file}'");
     };
     if let Some(authorized_keys_command) = &args.authorized_keys_command {
-        info!("authorized_keys returned from '{authorized_keys_command}'");
+        info!("Invoking command '{authorized_keys_command}' to obtain keys");
     }
 
     let ssh_agent_client = Client::connect(Path::new(path.as_str()))?;
