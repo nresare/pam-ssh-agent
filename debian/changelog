@@ -1,3 +1,9 @@
+pam-ssh-agent (0.9.4-1~noble) noble; urgency=medium
+
+  * implemented authorized_keys_command
+
+ -- Noa Resare <noa@resare.com>  Tue, 26 Aug 2025 20:24:38 +0000
+
 pam-ssh-agent (0.9.3-3~noble) noble; urgency=medium
 
   * vendored build for Ubuntu 24.04 ppa

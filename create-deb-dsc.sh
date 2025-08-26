@@ -1,6 +1,6 @@
 #!/bin/sh
 set -ex
-VERSION=0.9.3
+VERSION=0.9.4
 RUST_VERSION=1.82
 PATH=/usr/lib/rust-${RUST_VERSION}/bin:/usr/bin
 
