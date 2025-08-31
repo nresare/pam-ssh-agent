@@ -3,23 +3,23 @@ use log::{Level, Log, Metadata, Record};
 use std::env;
 use std::fmt::Display;
 use std::io::Write;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 use syslog::{Facility, Formatter3164, LogFormat, Logger, LoggerBackend, Severity};
 
-static INIT_LOG: OnceLock<()> = OnceLock::new();
-static LOG_LOCK: Mutex<()> = Mutex::new(());
+static LOG_LOCK: Mutex<bool> = Mutex::new(false);
 
 pub fn init_logging(pam_service: String) -> anyhow::Result<()> {
-    let _guard = LOG_LOCK
+    let mut guard = LOG_LOCK
         .lock()
-        .expect("Previous call to this method panicked");
-    if INIT_LOG.get().is_some() {
+        .expect("Another call to this method panicked");
+    if *guard {
+        // we have already initialized logging
         return Ok(());
     }
 
     init_impl(pam_service)?;
-
-    INIT_LOG.set(()).ok();
+    // this will only be reached if init_impl() returned Ok()
+    *guard = true;
     Ok(())
 }
 
