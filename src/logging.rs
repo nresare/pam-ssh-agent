@@ -6,7 +6,24 @@ use std::io::Write;
 use std::sync::{Arc, Mutex};
 use syslog::{Facility, Formatter3164, LogFormat, Logger, LoggerBackend, Severity};
 
+static LOG_LOCK: Mutex<bool> = Mutex::new(false);
+
 pub fn init_logging(pam_service: String) -> anyhow::Result<()> {
+    let mut guard = LOG_LOCK
+        .lock()
+        .expect("Another call to this method panicked");
+    if *guard {
+        // we have already initialized logging
+        return Ok(());
+    }
+
+    init_impl(pam_service)?;
+    // this will only be reached if init_impl() returned Ok()
+    *guard = true;
+    Ok(())
+}
+
+fn init_impl(pam_service: String) -> anyhow::Result<()> {
     let logger = syslog::unix(PrefixFormatter::new(Facility::LOG_AUTHPRIV, &pam_service))
         .map_err(|e| anyhow!("Failed to set up log: {}", e.description()))?;
     log::set_boxed_logger(Box::new(MyBasicLogger::new(logger)))?;
