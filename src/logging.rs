@@ -3,10 +3,27 @@ use log::{Level, Log, Metadata, Record};
 use std::env;
 use std::fmt::Display;
 use std::io::Write;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use syslog::{Facility, Formatter3164, LogFormat, Logger, LoggerBackend, Severity};
 
+static INIT_LOG: OnceLock<()> = OnceLock::new();
+static LOG_LOCK: Mutex<()> = Mutex::new(());
+
 pub fn init_logging(pam_service: String) -> anyhow::Result<()> {
+    let _guard = LOG_LOCK
+        .lock()
+        .expect("Previous call to this method panicked");
+    if INIT_LOG.get().is_some() {
+        return Ok(());
+    }
+
+    init_impl(pam_service)?;
+
+    INIT_LOG.set(()).ok();
+    Ok(())
+}
+
+fn init_impl(pam_service: String) -> anyhow::Result<()> {
     let logger = syslog::unix(PrefixFormatter::new(Facility::LOG_AUTHPRIV, &pam_service))
         .map_err(|e| anyhow!("Failed to set up log: {}", e.description()))?;
     log::set_boxed_logger(Box::new(MyBasicLogger::new(logger)))?;
