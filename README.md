@@ -1,65 +1,57 @@
 # A PAM module for authenticating using ssh-agent
 
-The goal of this project is to provide a PAM authentication module determining the identity
-of user based on a signature request and response sent via the ssh-agent protocol to a potentially
-remote `ssh-agent`.
+The goal of this project is to provide a PAM authentication module determining the identity of a user based on a
+signature request and response sent via the ssh-agent protocol to a potentially remote `ssh-agent`.
 
-One scenario that this module can be used in is to grant escalated privileges on a remote
-system with the `sudo` command where the identity of the user is confirmed by their ability
-to provide a signature made with a local ssh-agent and a private key that never leaves the
-designated hardware. I use the [Secretive](https://github.com/maxgoedjen/secretive) app on 
-macOS for this purpose.
+One scenario that this module can be used in is to grant escalated privileges on a remote system accessed using `ssh`
+with agent forwarding enabled and the `sudo` command. The user proves their identity by signing a challenge using their
+private key, and the signature is verified using a public key made available to the `pam-ssh-agent` module on the
+server. Combined with a setup where the private part of an authentication keypair is stored in custom hardware such as
+a YubiKey, a TPM chip, or the macOS secure enclave, this can provide a high level of security as well as convenience.
+I use the [Secretive](https://github.com/maxgoedjen/secretive) app on macOS for this purpose.
 
-This project is re-implementation of the [pam_ssh_agent_auth](https://github.com/jbeverly/pam_ssh_agent_auth) 
-module but does not share any code with that project. The eventual goal of this module is to be 
-functionally equivalent and a drop-in replacement for `pam_ssh_agent_auth`.
-
-This project is currently in a usable state, and has been tested with Ubuntu 24.04. As of now, 
-the path expansion patterns that pam_ssh_agent_auth provides are not implemented. In other 
-words a single authorized_keys file is expected to be used.
+This project is re-implementation of the [pam_ssh_agent_auth](https://github.com/jbeverly/pam_ssh_agent_auth) module but does not share any code with that project.
+We are pretty close to covering all the features of the original implementation, along with some additional features
+such as SSH Certificate based authentication.
 
 ## Project goals
 
-Since this is security sensitive software and a bug could easily result in undue privilege
-escalation, the main goal of this project is to be robust and easy to follow for would-be
-reviewers.
+Since this is security sensitive software and a bug could easily result in undue privilege escalation, the main goal of
+this project is to be robust and easy to follow for would-be reviewers.
 
-The implementation leans heavily on crates available in the Rust ecosystem that implements
-the different parts needed for the overall functionality, most notably the pam, ssh-key, 
-and ssh-agent-client-rs crates. Using upstream libraries directly is intended to make it
-easier to ensure that implementation issues with security implications gets addressed in a
-timely manner. A secondary benefit is that it is easier to support the full set of not obviously 
-insecure algorithms.
+The implementation leans heavily on crates available in the Rust ecosystem that implements the different parts needed
+for the overall functionality, most notably the `pam`, `ssh-key`, and `ssh-agent-client-rs` crates. Using upstream
+libraries directly is intended to make it easier to ensure that implementation issues with security implications gets
+addressed in a timely manner. A secondary benefit is that it is easier to support the full of algorithms that OpenSSH
+supports.
 
 ## Installation and packaging
 
-Getting this software packaged and integrated into upstream Linux distributions is an active
-goal of this project, however doing that in a way that conforms to upstream rules and conventions
-is a lot of work. If you have the ability to contribute to this work, feel free to have a look
-at the following issues:
+Getting this software packaged and integrated into upstream Linux distributions is an active goal of this project,
+however doing that in a way that conforms to upstream rules and conventions turns out to be a lot of work. If you have
+the ability to contribute feel free to have a look at the following issues:
 
 * Fedora/CentOS/Enterprise Linux packaging: https://github.com/nresare/pam-ssh-agent/issues/24
 * Ubuntu packaging: https://github.com/nresare/pam-ssh-agent/issues/54
 * Arch linux packaging: https://github.com/nresare/pam-ssh-agent/issues/50
 
-While this work is completing, feel free to use 
-https://copr.fedorainfracloud.org/coprs/noa/rust/ that has binary package for Fedora and Enterprise
-Linux derived distributions. There is also a less mature effort to package for Debian available
-at https://launchpad.net/~nresare/+archive/ubuntu/ppa.
+While this work is completing, feel free to use https://copr.fedorainfracloud.org/coprs/noa/rust/ that has binary 
+packages for Fedora and Enterprise Linux derived distributions. The configuration that is invoked by the copr
+infrastructure to build those packages is available from https://github.com/nresare/rpm-packaging The latest version is
+also packaged for Ubuntu 24.04 available at https://launchpad.net/~nresare/+archive/ubuntu/ppa where the
+`*_sources.changes` and related tarfiles are constructed using the `create-deb-dsc.sh` script.
 
-This archive also contains what is needed to build .rpm and .deb packages, Debian packages can be
-built with `debuild -b` and the top of `pam_ssh_agent.spec` contains instructions on how to build
-rpm packages.
+For other users, it is entirely possible to simply invoke `cargo build --release` and copy the resulting
+`target/release/libpam_ssh_agent.so` to the directory that holds your pam modules. Mine is in 
+`/lib/x86_64-linux-gnu/security`.
 
-For other users, it is entirely possible to simply invoke `cargo build --release` and copy the
-resulting `target/release/libpam_ssh_agent.so` to the directory that holds your pam modules. Mine
-is in `/lib/x86_64-linux-gnu/security`.
+## Example Usage
 
-## Usage
 * First, install the software using one of the methods above.
 * install `doas`, to ensure that you have a different way of elevating your privileges than sudo.
   You will need to add a `permit` line in `/etc/doas.conf` for it to work. This is not strictly
-  necessary but since this is still experimental 
+  necessary, but especially if you work on remote machines without console access it is good to
+  have a backup authentication method set up.
 * Replace the `common-auth` include in `/etc/pam.d/sudo` with `auth  required   pam_ssh_agent.so`
 * Configure `sudo` to not drop the `SSH_AUTH_SOCK` environment variable by
   adding `Defaults env_keep += "SSH_AUTH_SOCK"` to the file `/etc/sudoers.d/ssh_agent_env`
@@ -85,8 +77,8 @@ configuration file in `/etc/pam.d`. pam_ssh_agent currently understands the foll
   STDOUT in authorized_keys format.
 * `autorizxed_keys_command_user=NON_PRIVILEGED_USER` If set, specifies the user that `authorized_keys_command`
   will be executed as. If not specified, the command will be run as the requesting user.
-* `default_ssh_auth_sock=/path/to/ssh_agent_unix_socket` the path to use if the `SSH_AUTH_SOCKET` is not
-  set.
+* `default_ssh_auth_sock=/path/to/ssh_agent_unix_socket` the path to use if the `SSH_AUTH_SOCKET` environment variable
+  is not set.
 
 ## SSH Certificates
 
