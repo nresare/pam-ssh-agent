@@ -54,7 +54,7 @@ impl Args {
             match arg.deref() {
                 "debug" => debug = true,
                 any => {
-                    let any = expand_vars(any, env, handle)?;
+                    let any = expand_vars(any.to_string(), env, handle)?;
 
                     let parts: Vec<&str> = any.splitn(2, '=').collect();
                     if parts.len() != 2 {

@@ -70,7 +70,7 @@ impl PamHooks for PamSshAgent {
 }
 
 fn run(args: Vec<&CStr>, pam_handle: &PamHandle) -> Result<()> {
-    init_logging(pam_handle.get_service().unwrap_or("unknown".into()).into())?;
+    init_logging(pam_handle.get_service().unwrap_or("unknown".into()))?;
     let args = Args::parse(args, &UnixEnvironment, pam_handle)?;
     if args.debug {
         log::set_max_level(log::LevelFilter::Debug);

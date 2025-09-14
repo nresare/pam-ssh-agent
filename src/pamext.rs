@@ -1,20 +1,19 @@
 use anyhow::{anyhow, Result};
 use pam::items::{Service, User};
 use pam::module::PamHandle;
-use std::borrow::Cow;
 
 pub trait PamHandleExt {
     /// Fetch the PAM_USER value.
-    fn get_calling_user(&self) -> Result<Cow<'_, str>>;
+    fn get_calling_user(&self) -> Result<String>;
 
     /// Fetch the name of the current service, i.e. the software that uses pam for authentication
     /// using the PamHandle::get_item() method.
-    fn get_service(&self) -> Result<Cow<'_, str>>;
+    fn get_service(&self) -> Result<String>;
 }
 
 macro_rules! get_item {
     ($name:ident, $type:ty) => {
-        fn $name(&self) -> Result<Cow<'_, str>> {
+        fn $name(&self) -> Result<String> {
             let service = self
                 .get_item::<$type>()
                 .unwrap()
