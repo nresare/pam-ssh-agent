@@ -1,22 +1,21 @@
 use crate::environment::Environment;
 use crate::pamext::PamHandleExt;
 use anyhow::Result;
-use std::borrow::Cow;
 
 pub fn expand_vars<'a>(
-    input: &'a str,
+    input: String,
     env: &'a dyn Environment,
     pam_handle: &'a dyn PamHandleExt,
-) -> Result<Cow<'a, str>> {
+) -> Result<String> {
     let get_home = |s: &str| {
-        if s.is_empty() {
-            let user = pam_handle.get_calling_user()?;
-            Ok(env.get_homedir(&user)?)
+        let user = if s.is_empty() {
+            &pam_handle.get_calling_user()?
         } else {
-            Ok(env.get_homedir(s)?)
-        }
+            s
+        };
+        env.get_homedir(user)
     };
-    let mut input = expand_homedir(Cow::from(input), get_home)?;
+    let mut input = expand_homedir(input, get_home)?;
     input = expand_var(input, "%h", || {
         env.get_homedir(pam_handle.get_calling_user()?.as_ref())
     })?;
@@ -24,16 +23,14 @@ pub fn expand_vars<'a>(
     input = expand_var(input, "%u", || pam_handle.get_calling_user())?;
     input = expand_var(input, "%f", || env.get_fqdn())?;
     input = expand_var(input, "%U", || {
-        Ok(Cow::from(
-            env.get_uid(&pam_handle.get_calling_user()?)?.to_string(),
-        ))
+        Ok(env.get_uid(&pam_handle.get_calling_user()?)?.to_string())
     })?;
     Ok(input)
 }
 
-fn expand_var<'a, F>(input: Cow<'a, str>, pattern: &str, get_value: F) -> Result<Cow<'a, str>>
+fn expand_var<F>(input: String, pattern: &str, get_value: F) -> Result<String>
 where
-    F: FnOnce() -> Result<Cow<'a, str>>,
+    F: FnOnce() -> Result<String>,
 {
     let Some(idx) = input.find(pattern) else {
         return Ok(input);
@@ -41,21 +38,21 @@ where
     let mut output = input[..idx].to_owned();
     output.push_str(&get_value()?);
     output.push_str(input[idx + pattern.len()..].into());
-    Ok(Cow::from(output))
+    Ok(output)
 }
 
-fn expand_homedir<'a, F>(input: Cow<'a, str>, get_homedir: F) -> Result<Cow<'a, str>>
+fn expand_homedir<F>(input: String, get_homedir: F) -> Result<String>
 where
-    F: FnOnce(&str) -> Result<Cow<'a, str>>,
+    F: FnOnce(&str) -> Result<String>,
 {
     let Some(idx) = input.find('~') else {
         return Ok(input);
     };
     let user = get_username(&input, idx);
     let mut output = input[..idx].to_string();
-    output.push_str(get_homedir(user)?.as_ref());
+    output.push_str(&get_homedir(user)?);
     output.push_str(&input[idx + 1 + user.len()..]);
-    Ok(Cow::from(output))
+    Ok(output)
 }
 
 fn get_username(input: &str, idx: usize) -> &str {
@@ -73,47 +70,46 @@ mod tests {
     use crate::expansions::{expand_homedir, expand_var, expand_vars, get_username};
     use crate::test::{CannedEnv, CannedHandler};
     use anyhow::Result;
-    use std::borrow::Cow;
 
     #[test]
     fn test_find_homedir() -> Result<()> {
-        let result = expand_homedir(Cow::from("/foo/bar"), |s| {
+        let result = expand_homedir("/foo/bar".into(), |s| {
             assert_eq!(s, "");
-            Ok(Cow::from("/home/noa"))
+            Ok("/home/noa".into())
         })?;
-        assert_eq!(result.as_ref(), "/foo/bar");
+        assert_eq!(result, "/foo/bar");
 
-        let result = expand_homedir(Cow::from("~/.file"), |s| {
+        let result = expand_homedir("~/.file".into(), |s| {
             assert_eq!(s, "");
-            Ok(Cow::from("/home/noa"))
+            Ok("/home/noa".into())
         })?;
-        assert_eq!(result.as_ref(), "/home/noa/.file");
+        assert_eq!(result, "/home/noa/.file");
 
-        let result = expand_homedir(Cow::from("~bob/.file"), |s| {
+        let result = expand_homedir("~bob/.file".into(), |s| {
             assert_eq!(s, "bob");
-            Ok(Cow::from("/another/bob"))
+            Ok("/another/bob".into())
         })?;
-        assert_eq!(result.as_ref(), "/another/bob/.file");
+        assert_eq!(result, "/another/bob/.file");
 
-        let result = expand_homedir(Cow::from("~bob"), |s| {
+        let result = expand_homedir("~bob".into(), |s| {
             assert_eq!(s, "bob");
-            Ok(Cow::from("/another/bob"))
+            Ok("/another/bob".into())
         })?;
-        assert_eq!(result.as_ref(), "/another/bob");
+        assert_eq!(result, "/another/bob");
         Ok(())
     }
     #[test]
     fn test_expand_var() -> Result<()> {
-        let f = || Ok(Cow::from("hostname"));
-        let result = expand_var(Cow::from("/etc/%H/file"), "%H", f)?;
+        let f = || Ok("hostname".to_string());
+        let result = expand_var("/etc/%H/file".into(), "%H", f)?;
         assert_eq!(&result, "/etc/hostname/file");
         Ok(())
     }
 
     #[test]
     fn test_expand_var_uid() -> Result<()> {
-        let f = || Ok(Cow::from("401"));
-        let result = expand_var(Cow::from("/etc/%d/file"), "%d", f)?;
+        let f = || Ok("401".to_string());
+        let result = expand_var("/etc/%d/file".into(), "%d", f)?;
         assert_eq!(&result, "/etc/401/file");
         Ok(())
     }
@@ -122,7 +118,7 @@ mod tests {
     fn test_expand_vars() -> Result<()> {
         let env = CannedEnv::new(vec!["/another/bob", "host"]);
         let handler = CannedHandler::new(vec!["user"]);
-        let result = expand_vars("~bob/.foo/%H/%u/file", &env, &handler)?;
+        let result = expand_vars("~bob/.foo/%H/%u/file".into(), &env, &handler)?;
         assert_eq!("/another/bob/.foo/host/user/file", &result);
         Ok(())
     }

@@ -14,7 +14,8 @@ use std::time::Duration;
 use uzers::uid_t;
 
 /// An IdentityFilter can determine if an Identity provided by the ssh-agent is trusted or not
-/// by this plugin. It is constructed from files containing regular ssh keys or cert-authority keys.
+/// by this plugin. It is constructed from files or commands providing regular ssh keys or
+/// cert-authority keys.
 pub struct IdentityFilter {
     keys: HashSet<KeyData>,
     ca_keys: HashSet<KeyData>,
@@ -67,6 +68,9 @@ impl IdentityFilter {
         Ok(Self { keys, ca_keys })
     }
 
+    /// Returns true if the provided Identity is a PublicKey and this filter is configured
+    /// with the same public key, or if the Identity is a Certificate and this filter is
+    /// configured with a matching cert authority key.
     pub fn filter(&self, identity: &Identity) -> bool {
         match identity {
             PublicKey(key) => {
