@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use std::env;
 use uzers::os::unix::UserExt;
 use uzers::{get_user_by_name, uid_t};
 
@@ -10,6 +11,10 @@ pub trait Environment {
     fn get_fqdn(&'_ self) -> Result<String>;
 
     fn get_uid(&'_ self, user: &str) -> Result<uid_t>;
+
+    /// A simplified version of env::var() where a value containing an invalid utf-8 sequence
+    /// returns None
+    fn get_env(&'_ self, name: &str) -> Option<String>;
 }
 
 pub struct UnixEnvironment;
@@ -37,6 +42,10 @@ impl Environment for UnixEnvironment {
 
     fn get_uid(&'_ self, user: &str) -> Result<uid_t> {
         get_uid(user)
+    }
+
+    fn get_env(&'_ self, name: &str) -> Option<String> {
+        env::var(name).ok()
     }
 }
 

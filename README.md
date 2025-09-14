@@ -121,6 +121,19 @@ upgrade path from `pam_ssh_agent_auth` smoother as the previous functionality is
 * `%u` the username of the user attempting to authenticate.
 * `%U` numeric uid of the user attempting to authenticate.
 
+## Special behaviour when called by sshd
+
+Another feature inherited by `pam_ssh_agent_client` is that when calling `pam_get_item(3)` with the `PAM_SERVICE`
+argument returns the string `sshd` special logic is triggered: If the environment variable `SSH_AUTH_INFO_0` is set and
+contains a public key and that public key matches any of the configured public keys, this plugin invocation returns 
+`PAM_SUCCESS`. The environment variable is set by `sshd` to contain the public key that was used by its pubkey
+authentication method.
+
+This allows for `sshd` to be configured with this module as a `sufficient` authentication mechanism along with
+other mechanisms such as for example a time based one-time-password. If the key used in `sshd`'s initial authentication
+is in the list of higher security keys that this plugin is configured with, no additional authentication is required. 
+However, if the key is not in the list a secondary authentication method can be configured.
+
 ## The `native-crypto` feature
 
 In a [discussion](https://github.com/nresare/pam-ssh-agent/issues/24) about the possibility of having this piece of

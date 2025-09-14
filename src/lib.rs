@@ -20,14 +20,15 @@ use pam::module::{PamHandle, PamHooks};
 use std::env;
 use std::env::VarError;
 
-use crate::environment::UnixEnvironment;
+use crate::environment::{Environment, UnixEnvironment};
 use crate::filter::IdentityFilter;
 use crate::logging::init_logging;
 use crate::pamext::PamHandleExt;
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use args::Args;
-use log::{error, info};
+use log::{debug, error, info};
 use ssh_agent_client_rs::Client;
+use ssh_key::PublicKey;
 use std::ffi::CStr;
 use std::path::Path;
 
@@ -102,10 +103,40 @@ fn do_authenticate(args: &Args, handle: &PamHandle) -> Result<()> {
         args.authorized_keys_command_user.as_deref(),
         &handle.get_calling_user()?,
     )?;
+
+    if check_sshd_special_case(handle.get_service().ok(), &filter, UnixEnvironment)? {
+        return Ok(());
+    }
     match authenticate(&filter, ssh_agent_client, &handle.get_calling_user()?)? {
         true => Ok(()),
         false => Err(anyhow!("Agent did not know of any of the allowed keys")),
     }
+}
+
+/// Returns true if SSH_SERVICE is sshd, and the environment variable SSH_AUTH_INFO_0 is set
+/// to a public key that filter is configured with.
+fn check_sshd_special_case(
+    service: Option<String>,
+    filter: &IdentityFilter,
+    env: impl Environment,
+) -> Result<bool> {
+    match service {
+        Some(service) => {
+            if service != "sshd" {
+                return Ok(false);
+            }
+        }
+        None => return Ok(false),
+    }
+    let Some(key) = env.get_env("SSH_AUTH_INFO_0") else {
+        debug!("calling service is sshd but SSH_AUTH_INFO_0 is not set");
+        return Ok(false);
+    };
+    Ok(filter.filter(
+        &PublicKey::from_openssh(&key)
+            .context("failed to parse key in SSH_AUTH_INFO_0 environment variable")?
+            .into(),
+    ))
 }
 
 fn get_path(args: &Args) -> Result<String> {
@@ -122,5 +153,54 @@ fn get_path(args: &Args) -> Result<String> {
         None => Err(anyhow!(
             "SSH_AUTH_SOCK not set and the default_ssh_auth_sock parameter is not set"
         )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::check_sshd_special_case;
+    use crate::filter::IdentityFilter;
+    use crate::test::{data, CannedEnv, DummyEnv};
+    use anyhow::Result;
+    use std::path::Path;
+
+    #[test]
+    fn test_check_sshd_special_case() -> Result<()> {
+        let key = Path::new(data!("id_ed25519.pub"));
+        let filter = IdentityFilter::from_authorized_file(key)?;
+
+        // happy path, keys match
+        assert!(check_sshd_special_case(
+            Some("sshd".to_string()),
+            &filter,
+            CannedEnv::new(vec![include_str!(data!("id_ed25519.pub"))])
+        )?);
+
+        // different key
+        assert!(!check_sshd_special_case(
+            Some("sshd".to_string()),
+            &filter,
+            CannedEnv::new(vec![include_str!(data!("ca_key.pub"))])
+        )?);
+
+        // if service is not set, return false
+        assert!(!check_sshd_special_case(None, &filter, DummyEnv)?);
+
+        // if service is not set to something other than sshd, return false
+        assert!(!check_sshd_special_case(
+            Some("something".to_string()),
+            &filter,
+            DummyEnv
+        )?);
+
+        // not a key
+        assert!(check_sshd_special_case(
+            Some("sshd".to_string()),
+            &filter,
+            CannedEnv::new(vec!["invalid"])
+        )
+        .is_err());
+
+        Ok(())
     }
 }
