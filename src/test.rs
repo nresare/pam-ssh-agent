@@ -55,6 +55,10 @@ impl Environment for CannedEnv {
     fn get_uid(&'_ self, _user: &str) -> anyhow::Result<uid_t> {
         panic!()
     }
+
+    fn get_env(&'_ self, _: &str) -> Option<String> {
+        self.answer().ok()
+    }
 }
 
 canned!(CannedHandler);
@@ -84,6 +88,10 @@ impl Environment for DummyEnv {
     }
 
     fn get_uid(&'_ self, _user: &str) -> Result<uid_t> {
+        panic!()
+    }
+
+    fn get_env(&'_ self, _: &str) -> Option<String> {
         panic!()
     }
 }
