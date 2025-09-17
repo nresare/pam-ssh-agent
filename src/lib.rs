@@ -26,7 +26,7 @@ use crate::logging::init_logging;
 use crate::pamext::PamHandleExt;
 use anyhow::{anyhow, Result};
 use args::Args;
-use log::{error, info};
+use log::{debug, error, info};
 use ssh_agent_client_rs::Client;
 use std::ffi::CStr;
 use std::path::Path;
@@ -48,11 +48,15 @@ impl PamHooks for PamSshAgent {
         _flags: PamFlag,
     ) -> PamResultCode {
         match run(args, pam_handle) {
-            Ok(_) => PamResultCode::PAM_SUCCESS,
+            Ok(_) => {
+                debug!("Successful call to sm_authenticate(), returning PAM_SUCCESS");
+                PamResultCode::PAM_SUCCESS
+            }
             Err(err) => {
                 for line in format!("{err:?}").split('\n') {
                     error!("{line}")
                 }
+                debug!("Failed call to sm_authenticate(), returning PAM_AUTH_ERR");
                 PamResultCode::PAM_AUTH_ERR
             }
         }
