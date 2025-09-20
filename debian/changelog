@@ -1,3 +1,10 @@
+pam-ssh-agent (0.9.5-1~noble) noble; urgency=medium
+
+  * Ensure log init only happens once
+  * Implement sshd special case, see README.md for details
+
+ -- Noa Resare <noa@resare.com>  Tue, 20 Sep 2025 14:44:50 +0000
+
 pam-ssh-agent (0.9.4-1~noble) noble; urgency=medium
 
   * implemented authorized_keys_command
