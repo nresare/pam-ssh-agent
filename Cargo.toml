@@ -14,10 +14,10 @@ name = "pam_ssh_agent"
 crate-type = ["lib", "cdylib"]
 
 [dependencies]
-ssh-agent-client-rs = "1.1.1"
+ssh-agent-client-rs = { path = "../ssh-agent-client-rs"}
 getrandom = "0.3.3"
-ssh-key = { version = "0.6.7", features = ["crypto"] }
-signature = "2.2.0"
+ssh-key = { version = "0.7.0-rc.3", features = ["crypto"] }
+signature = "3.0.0-rc.4"
 anyhow = "1.0.98"
 pam-bindings = "0.1.1"
 # Keep this on 6.x until https://bugzilla.redhat.com/show_bug.cgi?id=2300127 is resolved
@@ -41,4 +41,3 @@ env_logger = "0.11.8"
 
 [features]
 native-crypto = ["dep:openssl", "dep:p256", "dep:p384", "dep:p521"]
-
