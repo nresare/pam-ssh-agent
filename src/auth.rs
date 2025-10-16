@@ -10,8 +10,8 @@ use Identity::{Certificate, PublicKey};
 
 const CHALLENGE_SIZE: usize = 32;
 
-/// Finds the first key, if any, that the ssh-agent knows about that is also present
-/// in the file referenced by keys_file_path, sends a random message to be signed and
+/// Finds the first key, if any, that the ssh-agent knows about that is also valid
+/// according to filter, sends a random message to be signed and
 /// verifies the signature with the public key.
 ///
 /// Returns Ok(true) if a key was found and the signature was correct, Ok(false) if no

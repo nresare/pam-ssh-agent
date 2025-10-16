@@ -10,6 +10,8 @@ pub fn verify(
     message: &[u8],
     signature: &Signature,
 ) -> Result<(), signature::Error> {
+    // the magic happens in the conditional use statements above. This is either invoking
+    // the pure rust implementations or OpenSSL through the code in the nativecrypto module
     key_data.verify(message, signature)
 }
 

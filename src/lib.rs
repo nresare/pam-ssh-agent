@@ -39,8 +39,10 @@ impl PamHooks for PamSshAgent {
     /// The authentication method called by pam to authenticate the user. This method
     /// will return PAM_SUCCESS if the ssh-agent available through the unix socket path
     /// in the PAM_AUTH_SOCK environment variable is able to correctly sign a random
-    /// message with the private key corresponding to one of the public keys in
-    /// /etc/security/authorized_key. Otherwise, this function returns PAM_AUTH_ERR.
+    /// message with the private key corresponding to one of the public keys made available
+    /// through the args. Otherwise, this function returns PAM_AUTH_ERR.
+    /// For the specifics of how the arguments are used to obtain ssh keys
+    /// and certificate authority keys, please refer to README.md
     ///
     /// This method logs diagnostic output to the AUTHPRIV syslog facility.
     fn sm_authenticate(

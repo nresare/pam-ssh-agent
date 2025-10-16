@@ -24,7 +24,7 @@ pub struct IdentityFilter {
 impl IdentityFilter {
     /// Construct a new Identity filter where path is the path to a file in authorized_keys
     /// format, and the ca_keys_file is an optional path to a file containing cert-authority
-    /// keys. See README.md for the details on those keys.
+    /// keys. See README.md for the details on the expected file format.
     pub fn new(
         authorized_keys_file: &Path,
         ca_keys_file: Option<&Path>,
@@ -70,7 +70,8 @@ impl IdentityFilter {
 
     /// Returns true if the provided Identity is a PublicKey and this filter is configured
     /// with the same public key, or if the Identity is a Certificate and this filter is
-    /// configured with a matching cert authority key.
+    /// configured with a matching cert authority key. Please note that for certificates
+    /// this is not enough, see auth::validate_cert for more information.
     pub fn filter(&self, identity: &Identity) -> bool {
         match identity {
             PublicKey(key) => {
@@ -101,10 +102,11 @@ enum Authorized {
     Key(KeyData),
     CAKey(KeyData),
 }
+const MAX_DURATION: Duration = Duration::from_secs(10);
 
 fn from_command(command: &str, uid: Option<uid_t>, arg: &str) -> Result<Vec<Authorized>> {
     debug!("Invoking command '{command} {arg}' to obtain public keys for user {arg}");
-    let buf = cmd::run(&[command, arg], Duration::from_secs(10), uid)?;
+    let buf = cmd::run(&[command, arg], MAX_DURATION, uid)?;
     from_str(&buf, &format!("{command}:(output):"), false)
 }
 

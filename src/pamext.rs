@@ -1,7 +1,9 @@
 use anyhow::{anyhow, Result};
 use pam::items::{Service, User};
 use pam::module::PamHandle;
+use std::str::from_utf8;
 
+/// This extension trait adds some extra methods to PamHandle
 pub trait PamHandleExt {
     /// Fetch the PAM_USER value.
     fn get_calling_user(&self) -> Result<String>;
@@ -18,7 +20,7 @@ macro_rules! get_item {
                 .get_item::<$type>()
                 .unwrap()
                 .ok_or(anyhow!("Could not get_item {}", stringify!($type)))?;
-            Ok(String::from_utf8(service.0.to_bytes().to_vec())?.into())
+            Ok(from_utf8(service.0.to_bytes())?.to_string())
         }
     };
 }

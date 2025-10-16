@@ -2,6 +2,7 @@ use crate::environment::Environment;
 use crate::pamext::PamHandleExt;
 use anyhow::Result;
 
+/// Expand the variables in input using pam_handle and env
 pub fn expand_vars<'a>(
     input: String,
     env: &'a dyn Environment,
@@ -15,14 +16,14 @@ pub fn expand_vars<'a>(
         };
         env.get_homedir(user)
     };
-    let mut input = expand_homedir(input, get_home)?;
-    input = expand_var(input, "%h", || {
+    let input = expand_homedir(input, get_home)?;
+    let input = expand_var(input, "%h", || {
         env.get_homedir(pam_handle.get_calling_user()?.as_ref())
     })?;
-    input = expand_var(input, "%H", || env.get_hostname())?;
-    input = expand_var(input, "%u", || pam_handle.get_calling_user())?;
-    input = expand_var(input, "%f", || env.get_fqdn())?;
-    input = expand_var(input, "%U", || {
+    let input = expand_var(input, "%H", || env.get_hostname())?;
+    let input = expand_var(input, "%u", || pam_handle.get_calling_user())?;
+    let input = expand_var(input, "%f", || env.get_fqdn())?;
+    let input = expand_var(input, "%U", || {
         Ok(env.get_uid(&pam_handle.get_calling_user()?)?.to_string())
     })?;
     Ok(input)

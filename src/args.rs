@@ -3,7 +3,7 @@ use crate::expansions::expand_vars;
 use crate::pamext::PamHandleExt;
 use anyhow::{anyhow, Result};
 use std::ffi::CStr;
-use std::ops::Deref;
+use std::str::from_utf8;
 
 const DEFAULT_AUTHORIZED_KEYS_PATH: &str = "/etc/security/authorized_keys";
 
@@ -46,12 +46,8 @@ impl Args {
         let mut authorized_keys_command: Option<String> = None;
         let mut authorized_keys_command_user: Option<String> = None;
 
-        for arg in args
-            .iter()
-            .map(|s| s.to_bytes())
-            .map(String::from_utf8_lossy)
-        {
-            match arg.deref() {
+        for arg in args.iter().map(|s| s.to_bytes()) {
+            match from_utf8(arg)? {
                 "debug" => debug = true,
                 any => {
                     let any = expand_vars(any.to_string(), env, handle)?;
@@ -98,10 +94,7 @@ mod test {
 
     impl CStrings {
         fn refs(&self) -> Vec<&CStr> {
-            self.inner
-                .iter()
-                .map(CString::as_ref)
-                .collect::<Vec<&CStr>>()
+            self.inner.iter().map(CString::as_ref).collect()
         }
     }
 
@@ -190,6 +183,13 @@ mod test {
         assert_eq!(
             "Unknown parameter key 'bad_key'",
             Args::parse(args!("bad_key=value").refs(), &DummyEnv, &DummyHandle)
+                .unwrap_err()
+                .to_string(),
+        );
+
+        assert_eq!(
+            "invalid utf-8 sequence of 1 bytes from index 0",
+            Args::parse(vec![&CString::new(vec![0x80])?], &DummyEnv, &DummyHandle)
                 .unwrap_err()
                 .to_string(),
         );

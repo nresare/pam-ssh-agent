@@ -10,6 +10,9 @@ use ssh_key::public::{EcdsaPublicKey, KeyData};
 use ssh_key::{Algorithm, EcdsaCurve, HashAlg, Signature};
 use EcdsaPublicKey::{NistP256, NistP384, NistP521};
 
+/// This trait mirrors signature::Verifier, but is separate and as such can be used
+/// to direct the signature verification cryptographic to the openssl version by simply
+/// conditionally import this trait instead of signature::Verifier
 pub trait PublicKeyVerifier {
     fn verify(&self, message: &[u8], signature: &Signature) -> Result<(), signature::Error>;
 }

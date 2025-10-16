@@ -8,6 +8,10 @@ use syslog::{Facility, Formatter3164, LogFormat, Logger, LoggerBackend, Severity
 
 static LOG_LOCK: Mutex<bool> = Mutex::new(false);
 
+/// This call configures the log crate such that messages logged with log crate
+/// macros are sent to the local syslog, prefixed in a way that matches how logging
+/// was done in pam_ssh_agent_auth. If this method is called multiple times, subsequent
+/// calls will not have any effect.
 pub fn init_logging(pam_service: String) -> anyhow::Result<()> {
     let mut guard = LOG_LOCK
         .lock()
@@ -26,7 +30,7 @@ pub fn init_logging(pam_service: String) -> anyhow::Result<()> {
 fn init_impl(pam_service: String) -> anyhow::Result<()> {
     let logger = syslog::unix(PrefixFormatter::new(Facility::LOG_AUTHPRIV, &pam_service))
         .map_err(|e| anyhow!("Failed to set up log: {}", e.description()))?;
-    log::set_boxed_logger(Box::new(MyBasicLogger::new(logger)))?;
+    log::set_boxed_logger(Box::new(PrefixWrappingLogger::new(logger)))?;
     log::set_max_level(log::LevelFilter::Info);
     Ok(())
 }
@@ -67,29 +71,28 @@ pub fn process_name() -> anyhow::Result<String> {
         .into())
 }
 
-// MyBasicLogger is a copy of syslog::BasicLogger with the formatter type PrefixFormatter.
+// PrefixWrappingLogger is a copy of syslog::BasicLogger with the formatter type PrefixFormatter.
 // It would be nice to contribute a Log implementation that could hold any Logger
-struct MyBasicLogger {
+struct PrefixWrappingLogger {
     logger: Arc<Mutex<Logger<LoggerBackend, PrefixFormatter>>>,
 }
 
-impl MyBasicLogger {
+impl PrefixWrappingLogger {
     fn new(logger: Logger<LoggerBackend, PrefixFormatter>) -> Self {
-        MyBasicLogger {
+        PrefixWrappingLogger {
             logger: Arc::new(Mutex::new(logger)),
         }
     }
 }
 
 #[allow(unused_variables, unused_must_use)]
-impl Log for MyBasicLogger {
+impl Log for PrefixWrappingLogger {
     fn enabled(&self, metadata: &Metadata) -> bool {
         metadata.level() <= log::max_level() && metadata.level() <= log::STATIC_MAX_LEVEL
     }
 
     fn log(&self, record: &Record) {
-        //FIXME: temporary patch to compile
-        let message = format!("{}", record.args());
+        let message = record.args();
         let mut logger = self.logger.lock().unwrap();
         match record.level() {
             Level::Error => logger.err(message),

@@ -3,6 +3,8 @@ use std::env;
 use uzers::os::unix::UserExt;
 use uzers::{get_user_by_name, uid_t};
 
+/// A trait for interacting with the environment of this plugin. These methods are
+/// grouped together to simplify testing
 pub trait Environment {
     fn get_homedir(&'_ self, user: &str) -> Result<String>;
 

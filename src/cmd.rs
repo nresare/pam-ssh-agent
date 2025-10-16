@@ -8,7 +8,7 @@ use wait_timeout::ChildExt;
 
 /// Invoke the specified command. If the command does not finish after the specified
 /// timeout duration, Err is returned, else the content of stdout from the command is
-/// returned. If effective_uid is provided,
+/// returned. If effective_uid is provided, set the uid of the child process.
 pub fn run(command: &[&str], timeout: Duration, effective_uid: Option<u32>) -> Result<String> {
     let mut cmd = Command::new(command[0]);
 
@@ -74,11 +74,6 @@ mod tests {
 
     static TIMEOUT: Duration = Duration::from_secs(2);
 
-    #[test]
-    fn test_simple() -> Result<()> {
-        assert_eq!("foo", run(&["/bin/echo", "foo"], TIMEOUT, None)?);
-        Ok(())
-    }
     #[test]
     fn test_run() -> Result<()> {
         assert_eq!("foo", run(&["/bin/echo", "foo"], TIMEOUT, None)?);
