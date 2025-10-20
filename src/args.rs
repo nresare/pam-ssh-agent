@@ -16,6 +16,7 @@ pub struct Args {
     pub ca_keys_file: Option<String>,
     pub authorized_keys_command: Option<String>,
     pub authorized_keys_command_user: Option<String>,
+    pub allow_user_owned: bool,
 }
 
 impl Default for Args {
@@ -27,6 +28,7 @@ impl Default for Args {
             ca_keys_file: None,
             authorized_keys_command: None,
             authorized_keys_command_user: None,
+            allow_user_owned: false,
         }
     }
 }
@@ -45,13 +47,17 @@ impl Args {
         let mut ca_keys_file: Option<String> = None;
         let mut authorized_keys_command: Option<String> = None;
         let mut authorized_keys_command_user: Option<String> = None;
+        let mut allow_user_owned = false;
 
         for arg in args.iter().map(|s| s.to_bytes()) {
             match from_utf8(arg)? {
                 "debug" => debug = true,
+                "allow_user_owned_authorized_keys_file" => allow_user_owned = true,
                 any => {
+                    if contains_home_dir_expansion(any) {
+                        allow_user_owned = true;
+                    }
                     let any = expand_vars(any.to_string(), env, handle)?;
-
                     let parts: Vec<&str> = any.splitn(2, '=').collect();
                     if parts.len() != 2 {
                         return Err(anyhow!("Could not split '{any}' using '='"));
@@ -77,8 +83,13 @@ impl Args {
             ca_keys_file,
             authorized_keys_command,
             authorized_keys_command_user,
+            allow_user_owned,
         })
     }
+}
+
+fn contains_home_dir_expansion(input: &str) -> bool {
+    input.contains("%h") || input.contains("~")
 }
 
 #[cfg(test)]
@@ -118,6 +129,19 @@ mod test {
         assert_eq!(
             expected,
             Args::parse(args!().refs(), &DummyEnv, &DummyHandle)?
+        );
+
+        let expected = Args {
+            allow_user_owned: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            expected,
+            Args::parse(
+                args!("allow_user_owned_authorized_keys_file").refs(),
+                &DummyEnv,
+                &DummyHandle
+            )?
         );
 
         let expected = Args {

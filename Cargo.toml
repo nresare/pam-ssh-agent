@@ -14,7 +14,7 @@ name = "pam_ssh_agent"
 crate-type = ["lib", "cdylib"]
 
 [dependencies]
-ssh-agent-client-rs = "1.1.1"
+ssh-agent-client-rs = "1.1.2"
 getrandom = "0.3.3"
 ssh-key = { version = "0.6.7", features = ["crypto"] }
 signature = "2.2.0"
@@ -38,6 +38,7 @@ wait-timeout = "0.2.1"
 base64 = "0.22.1"
 ssh-encoding = "0.2.0"
 env_logger = "0.11.8"
+regex = "1.12.2"
 
 [features]
 native-crypto = ["dep:openssl", "dep:p256", "dep:p384", "dep:p521"]

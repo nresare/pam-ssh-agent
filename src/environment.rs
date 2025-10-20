@@ -1,5 +1,7 @@
 use anyhow::{anyhow, Result};
 use std::env;
+use std::os::unix::fs::MetadataExt;
+use std::path::Path;
 use uzers::os::unix::UserExt;
 use uzers::{get_user_by_name, uid_t};
 
@@ -17,6 +19,8 @@ pub trait Environment {
     /// A simplified version of env::var() where a value containing an invalid utf-8 sequence
     /// returns None
     fn get_env(&'_ self, name: &str) -> Option<String>;
+
+    fn get_owner(&'_ self, file: &Path) -> Result<uid_t>;
 }
 
 pub struct UnixEnvironment;
@@ -48,6 +52,10 @@ impl Environment for UnixEnvironment {
 
     fn get_env(&'_ self, name: &str) -> Option<String> {
         env::var(name).ok()
+    }
+
+    fn get_owner(&'_ self, file: &Path) -> Result<uid_t> {
+        Ok(file.metadata()?.uid())
     }
 }
 

@@ -30,6 +30,7 @@ use log::{debug, error, info};
 use ssh_agent_client_rs::Client;
 use ssh_key::PublicKey;
 use std::ffi::CStr;
+use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
 struct PamSshAgent;
@@ -103,9 +104,22 @@ fn do_authenticate(args: &Args, handle: &PamHandle) -> Result<()> {
 
     let ssh_agent_client = Client::connect(Path::new(path.as_str()))?;
 
+    let file = Path::new(&args.file);
+    check_permissions(file, args.allow_user_owned, &calling_user, UnixEnvironment)?;
+
+    let ca_file = args.ca_keys_file.as_deref().map(Path::new);
+    if let Some(ca_file) = ca_file {
+        check_permissions(
+            ca_file,
+            args.allow_user_owned,
+            &calling_user,
+            UnixEnvironment,
+        )?;
+    }
+
     let filter = IdentityFilter::new(
-        Path::new(args.file.as_str()),
-        args.ca_keys_file.as_deref().map(Path::new),
+        file,
+        ca_file,
         args.authorized_keys_command.as_deref(),
         args.authorized_keys_command_user.as_deref(),
         &calling_user,
@@ -118,6 +132,37 @@ fn do_authenticate(args: &Args, handle: &PamHandle) -> Result<()> {
         true => Ok(()),
         false => Err(anyhow!("Agent did not know of any of the allowed keys")),
     }
+}
+
+fn check_permissions(
+    file: &Path,
+    allow_user_owned_files: bool,
+    calling_user: &str,
+    env: impl Environment,
+) -> Result<()> {
+    if !file.exists() {
+        return Ok(());
+    }
+    let owner = env.get_owner(file)?;
+    if owner != 0 {
+        if allow_user_owned_files {
+            let calling_uid = env.get_uid(calling_user)?;
+            if owner != calling_uid {
+                return Err(anyhow!(
+                    "The file '{file:?}' is not owned by either the calling user or root"
+                ));
+            }
+        } else {
+            return Err(anyhow!("The file {file:?} needs to be owned by root"));
+        }
+    }
+    let permissions = file.metadata()?.permissions();
+    if permissions.mode() & 0o022 != 0 {
+        return Err(anyhow!(
+            "Unsafe file permissions on {file:?}, group or other read permissions present"
+        ));
+    }
+    Ok(())
 }
 
 /// Returns true if SSH_SERVICE is sshd, and the environment variable SSH_AUTH_INFO_0 is set
@@ -165,10 +210,11 @@ fn get_path(args: &Args) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use crate::check_sshd_special_case;
     use crate::filter::IdentityFilter;
     use crate::test::{data, CannedEnv, DummyEnv};
+    use crate::{check_permissions, check_sshd_special_case};
     use anyhow::Result;
+    use regex::Regex;
     use std::path::Path;
 
     #[test]
@@ -208,6 +254,41 @@ mod tests {
         )
         .is_err());
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_check_permissions() -> Result<()> {
+        // Let's pretend this file is owned by root
+        let env = CannedEnv::new(vec!["0"]);
+        check_permissions(Path::new(data!("ca_key.pub")), false, "", env)?;
+
+        // if the file does not exist the call simply succeeds
+        check_permissions(Path::new("/does/not/exist"), true, "", DummyEnv)?;
+
+        // being a bit "smart" here and figuring out the owner of this project
+        let path = Path::new(data!("ca_key.pub"));
+
+        // The first call to canned_env will expect the owner of the file, the second call
+        // will try to determine the user of
+        let env = CannedEnv::new(vec!["42", "42"]);
+        check_permissions(path, true, "user", env)?;
+
+        // When allow_user_owned files is set to false this should fail
+        let env = CannedEnv::new(vec!["42"]);
+        let result = check_permissions(path, false, "user", env)
+            .unwrap_err()
+            .to_string();
+        let expected = Regex::new(r"The file .* needs to be owned by root")?;
+        assert!(expected.is_match(&result));
+
+        let env = CannedEnv::new(vec!["0"]);
+        let result = check_permissions(Path::new(data!("world_write")), false, "", env)
+            .unwrap_err()
+            .to_string();
+        let expected =
+            Regex::new(r"Unsafe file permissions on .*. group or other read permissions present")?;
+        assert!(expected.is_match(&result));
         Ok(())
     }
 }

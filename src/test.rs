@@ -13,6 +13,7 @@ use anyhow::Result;
 pub(crate) use data;
 use std::cell::RefCell;
 use std::collections::VecDeque;
+use std::path::Path;
 use uzers::uid_t;
 
 pub(crate) const CERT_STR: &str = include_str!(data!("cert.pub"));
@@ -20,18 +21,20 @@ pub(crate) const CERT_STR: &str = include_str!(data!("cert.pub"));
 macro_rules! canned {
     ($name:ident) => {
         pub struct $name {
-            answers: RefCell<VecDeque<&'static str>>,
+            answers: RefCell<VecDeque<String>>,
         }
 
         impl $name {
-            pub(crate) fn new(answers: Vec<&'static str>) -> Self {
+            pub(crate) fn new(answers: Vec<&str>) -> Self {
                 $name {
-                    answers: RefCell::new(VecDeque::from(answers)),
+                    answers: RefCell::new(VecDeque::from(
+                        answers.iter().map(ToString::to_string).collect::<Vec<_>>(),
+                    )),
                 }
             }
 
             fn answer(&'_ self) -> anyhow::Result<String> {
-                Ok(self.answers.borrow_mut().pop_front().unwrap().to_string())
+                Ok(self.answers.borrow_mut().pop_front().unwrap())
             }
         }
     };
@@ -51,12 +54,16 @@ impl Environment for CannedEnv {
         self.answer()
     }
 
-    fn get_uid(&'_ self, _user: &str) -> anyhow::Result<uid_t> {
-        panic!()
+    fn get_uid(&'_ self, _user: &str) -> Result<uid_t> {
+        Ok(self.answer()?.parse().expect("expected valid uid as str"))
     }
 
     fn get_env(&'_ self, _: &str) -> Option<String> {
         self.answer().ok()
+    }
+
+    fn get_owner(&'_ self, _file: &Path) -> Result<uid_t> {
+        Ok(self.answer()?.parse().expect("expected valid uid as str"))
     }
 }
 
@@ -91,6 +98,10 @@ impl Environment for DummyEnv {
     }
 
     fn get_env(&'_ self, _: &str) -> Option<String> {
+        panic!()
+    }
+
+    fn get_owner(&'_ self, _file: &Path) -> Result<uid_t> {
         panic!()
     }
 }
