@@ -76,24 +76,22 @@ mod tests {
 
     #[test]
     fn test_run() -> Result<()> {
-        assert_eq!("foo", run(&["/bin/echo", "foo"], TIMEOUT, None)?);
+        assert_eq!("foo", run(&["echo", "foo"], TIMEOUT, None)?);
+        assert_eq!("bar", run(&["/bin/sh", "-c", "echo bar"], TIMEOUT, None)?);
 
-        let result = run(&["/usr/bin/false"], TIMEOUT, None);
+        let result = run(&["false"], TIMEOUT, None);
         let Err(e) = result else {
             panic!("Test expected non-zero exit status");
         };
-        assert_eq!(
-            format!("{e}"),
-            "Non-zero exit status from '/usr/bin/false': 1",
-        );
+        assert_eq!(format!("{e}"), "Non-zero exit status from 'false': 1",);
 
-        let result = run(&["/bin/sleep", "10"], Duration::from_millis(100), None);
+        let result = run(&["sleep", "10"], Duration::from_millis(100), None);
         let Err(e) = result else {
             panic!("Expected timeout");
         };
         assert_eq!(
             format!("{e}"),
-            "Timed out waiting for command '/bin/sleep' after 100ms",
+            "Timed out waiting for command 'sleep' after 100ms",
         );
 
         Ok(())
