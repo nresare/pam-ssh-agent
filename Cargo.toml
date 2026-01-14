@@ -1,7 +1,7 @@
 [package]
 name = "pam-ssh-agent"
 version = "0.9.5"
-edition = "2021"
+edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/nresare/pam-ssh-agent"
 authors = ["Noa Resare"]

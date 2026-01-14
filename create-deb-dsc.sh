@@ -1,7 +1,7 @@
 #!/bin/sh
 set -ex
 VERSION=0.9.5
-RUST_VERSION=1.82
+RUST_VERSION=1.85
 PATH=/usr/lib/rust-${RUST_VERSION}/bin:/usr/bin
 
 rm -rf vendor
