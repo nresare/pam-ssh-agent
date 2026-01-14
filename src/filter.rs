@@ -1,12 +1,12 @@
 use crate::cmd;
 use crate::environment::get_uid;
-use anyhow::anyhow;
 use anyhow::Result;
+use anyhow::anyhow;
 use log::{debug, info};
 use ssh_agent_client_rs::Identity;
 use ssh_agent_client_rs::Identity::{Certificate, PublicKey};
-use ssh_key::public::KeyData;
 use ssh_key::AuthorizedKeys;
+use ssh_key::public::KeyData;
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
@@ -140,7 +140,7 @@ fn from_str(buf: &str, what: &str, ca_keys: bool) -> Result<Vec<Authorized>> {
 #[cfg(test)]
 mod tests {
     use crate::filter::IdentityFilter;
-    use crate::test::{data, CERT_STR};
+    use crate::test::{CERT_STR, data};
     use ssh_agent_client_rs::Identity;
     use ssh_key::{Certificate, PublicKey};
     use std::path::Path;

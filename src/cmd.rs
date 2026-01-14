@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use log::warn;
 use std::io::Read;
 use std::os::unix::process::CommandExt;

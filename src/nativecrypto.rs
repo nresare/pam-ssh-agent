@@ -1,3 +1,4 @@
+use EcdsaPublicKey::{NistP256, NistP384, NistP521};
 use anyhow::anyhow;
 use openssl::bn::BigNum;
 use openssl::ec::{EcGroup, EcKey, EcPoint};
@@ -8,7 +9,6 @@ use openssl::rsa::Rsa;
 use openssl::sign::Verifier;
 use ssh_key::public::{EcdsaPublicKey, KeyData};
 use ssh_key::{Algorithm, EcdsaCurve, HashAlg, Signature};
-use EcdsaPublicKey::{NistP256, NistP384, NistP521};
 
 /// This trait mirrors signature::Verifier, but is separate and as such can be used
 /// to direct the signature verification cryptographic to the openssl version by simply
@@ -78,7 +78,7 @@ fn get_key_and_digest(
                     return Err(anyhow::anyhow!(
                         "Trying to read a non-RSA signature with an RSA key: {:?}",
                         signature.algorithm()
-                    ))
+                    ));
                 }
             };
             Ok((PKey::from_rsa(rsa)?, Some(digest)))

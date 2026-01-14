@@ -18,7 +18,9 @@ fn main() -> Result<()> {
     let filter = IdentityFilter::from_authorized_file(Path::new(authorized_keys_path.as_str()))?;
     let result = authenticate(&filter, client, "")?;
     if result {
-        info!("the ssh agent at {path} signed a random message as validated by {authorized_keys_path}");
+        info!(
+            "the ssh agent at {path} signed a random message as validated by {authorized_keys_path}"
+        );
     } else {
         info!("No public key in {authorized_keys_path} could be used with the ssh-agent at {path}");
     }

@@ -1,7 +1,7 @@
 use crate::environment::Environment;
 use crate::expansions::expand_vars;
 use crate::pamext::PamHandleExt;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use std::ffi::CStr;
 use std::str::from_utf8;
 

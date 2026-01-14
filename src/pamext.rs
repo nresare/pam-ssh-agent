@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use pam::items::{Service, User};
 use pam::module::PamHandle;
 use std::str::from_utf8;

@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use std::env;
 use uzers::os::unix::UserExt;
 use uzers::{get_user_by_name, uid_t};

@@ -24,7 +24,7 @@ use crate::environment::{Environment, UnixEnvironment};
 use crate::filter::IdentityFilter;
 use crate::logging::init_logging;
 use crate::pamext::PamHandleExt;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use args::Args;
 use log::{debug, error, info};
 use ssh_agent_client_rs::Client;
@@ -167,7 +167,7 @@ fn get_path(args: &Args) -> Result<String> {
 mod tests {
     use crate::check_sshd_special_case;
     use crate::filter::IdentityFilter;
-    use crate::test::{data, CannedEnv, DummyEnv};
+    use crate::test::{CannedEnv, DummyEnv, data};
     use anyhow::Result;
     use std::path::Path;
 
@@ -201,12 +201,14 @@ mod tests {
         )?);
 
         // not a key
-        assert!(check_sshd_special_case(
-            Some("sshd".to_string()),
-            &filter,
-            CannedEnv::new(vec!["invalid"])
-        )
-        .is_err());
+        assert!(
+            check_sshd_special_case(
+                Some("sshd".to_string()),
+                &filter,
+                CannedEnv::new(vec!["invalid"])
+            )
+            .is_err()
+        );
 
         Ok(())
     }

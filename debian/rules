@@ -1,6 +1,6 @@
 #!/usr/bin/make -f
 
-RUST_VERSION=1.82
+RUST_VERSION=1.85
 
 export CARGO_VENDOR_DIR=vendor
 export PATH=/usr/lib/rust-$(RUST_VERSION)/bin:/usr/bin
@@ -12,6 +12,9 @@ export CARGO_HOME=debian/cargo_home
 # the cargo buildsystem do_auto_test hard codes running /usr/bin/cargo which is too old
 override_dh_auto_test:
 	cargo test --verbose --verbose
+
+override_dh_auto_clean:
+	cargo clean
 
 
 # this package is a bit special since it builds a native shared library, something

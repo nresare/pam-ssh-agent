@@ -2,8 +2,8 @@
 use crate::nativecrypto::PublicKeyVerifier;
 #[cfg(not(feature = "native-crypto"))]
 use signature::Verifier;
-use ssh_key::public::KeyData;
 use ssh_key::Signature;
+use ssh_key::public::KeyData;
 
 pub fn verify(
     key_data: &KeyData,
@@ -18,8 +18,8 @@ pub fn verify(
 #[cfg(test)]
 mod tests {
     use crate::verify::verify;
-    use base64::prelude::BASE64_STANDARD;
     use base64::Engine;
+    use base64::prelude::BASE64_STANDARD;
     use ssh_encoding::Decode;
     use ssh_key::{PublicKey, Signature};
 

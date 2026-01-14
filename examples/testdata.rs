@@ -1,6 +1,6 @@
 use anyhow::Result;
-use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
+use base64::prelude::BASE64_STANDARD;
 use signature::SignatureEncoding;
 use ssh_agent_client_rs::Client;
 use ssh_key::PublicKey;

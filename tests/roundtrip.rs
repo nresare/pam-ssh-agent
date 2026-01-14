@@ -1,5 +1,5 @@
 use pam_ssh_agent::filter::IdentityFilter;
-use pam_ssh_agent::{authenticate, SSHAgent};
+use pam_ssh_agent::{SSHAgent, authenticate};
 use signature::Signer;
 use ssh_agent_client_rs::Identity;
 use ssh_key::{PrivateKey, PublicKey, Signature};
@@ -20,10 +20,9 @@ impl DummySshAgent {
 
 impl SSHAgent for DummySshAgent {
     fn list_identities(&mut self) -> ssh_agent_client_rs::Result<Vec<Identity<'static>>> {
-        Ok(vec![PublicKey::from_openssh(include_str!(
-            "data/id_ed25519.pub"
-        ))?
-        .into()])
+        Ok(vec![
+            PublicKey::from_openssh(include_str!("data/id_ed25519.pub"))?.into(),
+        ])
     }
 
     fn sign<'a>(

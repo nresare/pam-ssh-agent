@@ -1,12 +1,12 @@
 pub use crate::agent::SSHAgent;
 use crate::filter::IdentityFilter;
 use crate::verify::verify;
-use anyhow::{anyhow, Result};
+use Identity::{Certificate, PublicKey};
+use anyhow::{Result, anyhow};
 use log::{debug, info};
 use ssh_agent_client_rs::{Error as SACError, Identity};
 use ssh_key::HashAlg;
 use std::time::{SystemTime, UNIX_EPOCH};
-use Identity::{Certificate, PublicKey};
 
 const CHALLENGE_SIZE: usize = 32;
 
@@ -87,7 +87,7 @@ fn validate_cert(cert: &ssh_key::Certificate, when: SystemTime, principal: &str)
 #[cfg(test)]
 mod test {
     use crate::auth::validate_cert;
-    use crate::test::{data, CERT_STR};
+    use crate::test::{CERT_STR, data};
     use anyhow::Result;
     use ssh_key::Certificate;
     use std::time::{Duration, SystemTime};
