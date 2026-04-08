@@ -89,6 +89,12 @@ be used. A certificate is considered valid if the following conditions are met:
 * The certificate signature is valid and was made by a trusted certificate key
 * The username provided to the plugin by the PAM_USER item is in the certificate's list of principals
 
+> [!NOTE]
+> Please note that as of now certificates need to have an expiry time. Once the fix to
+> [this bug](https://github.com/RustCrypto/SSH/issues/174) has made it into a stable release
+> we can relax this requirement but for now just add an expiry time very far into the future to accomplish
+> the same thing.
+
 Just like with OpenSSH there are two ways to specify a certificate authority key. In the same way as the
 authorized_keys format, a certificate authority key can be specified alongside the regular ssh keys by being
 prefixed by a list of options that include the `cert-authority` option. In the simplest case, this means
