@@ -7,8 +7,9 @@ You may also want to change the `VERSION` variable in the `setup.sh` file to ref
 Once you're done, cd to the `autosfx` directory, so the `pam-ssh-agent-installer` directory is a subdirectory and execute the following sfx maker command
 
 ```
-VERSION=$(grep "^VERSION=" pam-ssh-agent-installer/setup.sh | cut -d'=' -f2)
-makeself --gzip --sha256 ./pam-ssh-agent-installer ./pam-ssg-agent-installer-${VERSION}.sh "pam-ssh-agent ${VERSION}" ./setup.sh
+SETUP_VERSION=$(grep "^VERSION=" pam-ssh-agent-installer/setup.sh | cut -d'=' -f2)
+PACKAGE_VERSION=-2
+makeself --gzip --sha256 ./pam-ssh-agent-installer ./pam-ssh-agent-installer-${VERSION}${PACKAGE_VERSION}.sh "pam-ssh-agent ${VERSION}" ./setup.sh
 ```
 
 If you don't have makeself, you can install it via your favorite package manager or downloaded it from github via https://github.com/megastep/makeself/releases/
