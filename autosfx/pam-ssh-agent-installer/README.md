@@ -4,12 +4,12 @@ It supposes that you have compiled `pam-ssh-agent` via `cargo build --release` a
 
 You may also want to change the `VERSION` variable in the `setup.sh` file to reflect the version of pam-ssh-agent you are installing. The installer script will log its actions to `/var/log/pam-ssh-agent-sfx.log`.
 
-Once you're done, cd to the `autosfx` directory, so the `pam-ssh-agent-installer` directory is a subdirectory and execute the following sfx maker command
+Once you're done, cd to the `autosfx` directory, so the `pam-ssh-agent-installer` directory is a subdirectory and execute the following sfx maker command (using --notemp so we can run on OpenSCAP security profiles where /tmp is mounted as noexec)
 
 ```
 SETUP_VERSION=$(grep "^VERSION=" pam-ssh-agent-installer/setup.sh | cut -d'=' -f2)
 PACKAGE_VERSION=-2
-makeself --gzip --sha256 ./pam-ssh-agent-installer ./pam-ssh-agent-installer-${VERSION}${PACKAGE_VERSION}.sh "pam-ssh-agent ${VERSION}" ./setup.sh
+makeself --gzip --sha256 --notemp ./pam-ssh-agent-installer ./pam-ssh-agent-installer-${VERSION}${PACKAGE_VERSION}.sh "pam-ssh-agent ${VERSION}" ./setup.sh
 ```
 
 If you don't have makeself, you can install it via your favorite package manager or downloaded it from github via https://github.com/megastep/makeself/releases/
