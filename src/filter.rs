@@ -2,13 +2,15 @@ use crate::cmd;
 use crate::environment::get_uid;
 use anyhow::Result;
 use anyhow::anyhow;
-use log::{debug, info};
+use log::{debug, error, info};
 use ssh_agent_client_rs::Identity;
 use ssh_agent_client_rs::Identity::{Certificate, PublicKey};
 use ssh_key::AuthorizedKeys;
 use ssh_key::public::KeyData;
 use std::collections::HashSet;
 use std::fs;
+use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::time::Duration;
 use uzers::uid_t;
@@ -34,7 +36,31 @@ impl IdentityFilter {
     ) -> Result<Self> {
         let mut identities = Vec::new();
         if authorized_keys_file.exists() {
-            identities.extend(from_file(authorized_keys_file, false)?);
+            if let Ok(mdata) = std::fs::metadata(authorized_keys_file) {
+                if mdata.is_file() {
+                    // Using a bitmask on mdata permissions since it returns something like 0o100600
+                    let file_perms: u32 = mdata.permissions().mode() & 0o777;
+                    if file_perms == 0o600 {
+                        if mdata.uid() == 0 && mdata.gid() == 0 {
+                            identities.extend(from_file(authorized_keys_file, false)?);
+                        } else {
+                            error!(
+                                "File {:?} should be owned by uid 0 and gid 0 (root:root)",
+                                authorized_keys_file
+                            );
+                        }
+                    } else {
+                        error!(
+                            "File {:?} should have permissions 600 but has permissions {:o}",
+                            authorized_keys_file, file_perms
+                        );
+                    }
+                } else {
+                    error!("Path {:?} is not a valid file", authorized_keys_file);
+                }
+            } else {
+                error!("Cannot get metadata from file {:?}", authorized_keys_file);
+            }
         } else if ca_keys_file.is_none() && authorized_keys_command.is_none() {
             info!("No valid keys for authentication, {authorized_keys_file:?} does not exist");
         }
