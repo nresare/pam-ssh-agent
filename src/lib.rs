@@ -15,6 +15,7 @@ mod verify;
 
 pub use crate::agent::SSHAgent;
 pub use crate::auth::authenticate;
+use crate::auth::validate_cert;
 use pam::constants::{PamFlag, PamResultCode};
 use pam::module::{PamHandle, PamHooks};
 use std::env;
@@ -24,13 +25,14 @@ use crate::environment::{Environment, UnixEnvironment};
 use crate::filter::IdentityFilter;
 use crate::logging::init_logging;
 use crate::pamext::PamHandleExt;
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Result, anyhow};
 use args::Args;
 use log::{debug, error, info};
-use ssh_agent_client_rs::Client;
-use ssh_key::PublicKey;
+use ssh_agent_client_rs::{Client, Identity};
+use ssh_key::{Certificate, PublicKey};
 use std::ffi::CStr;
 use std::path::Path;
+use std::time::SystemTime;
 
 struct PamSshAgent;
 pam::pam_hooks!(PamSshAgent);
@@ -77,7 +79,12 @@ impl PamHooks for PamSshAgent {
 }
 
 fn run(args: Vec<&CStr>, pam_handle: &PamHandle) -> Result<()> {
-    init_logging(pam_handle.get_service().unwrap_or("unknown".into()))?;
+    // A logging-setup failure must never deny authentication: on some platforms (e.g.
+    // macOS) the syslog socket probed by init_logging() may be unavailable, and
+    // propagating that error would fail every authentication closed. Best-effort instead.
+    if let Err(e) = init_logging(pam_handle.get_service().unwrap_or("unknown".into())) {
+        eprintln!("pam_ssh_agent: failed to initialize logging: {e:?}");
+    }
     let args = Args::parse(args, &UnixEnvironment, pam_handle)?;
     if args.debug {
         log::set_max_level(log::LevelFilter::Debug);
@@ -111,7 +118,12 @@ fn do_authenticate(args: &Args, handle: &PamHandle) -> Result<()> {
         &calling_user,
     )?;
 
-    if check_sshd_special_case(handle.get_service().ok(), &filter, UnixEnvironment)? {
+    if check_sshd_special_case(
+        handle.get_service().ok(),
+        &filter,
+        UnixEnvironment,
+        &calling_user,
+    )? {
         return Ok(());
     }
     match authenticate(&filter, ssh_agent_client, &handle.get_calling_user()?)? {
@@ -120,12 +132,21 @@ fn do_authenticate(args: &Args, handle: &PamHandle) -> Result<()> {
     }
 }
 
-/// Returns true if SSH_SERVICE is sshd, and the environment variable SSH_AUTH_INFO_0 is set
-/// to a public key that filter is configured with.
+/// Implements the sshd special case: when the calling service is `sshd`, the environment
+/// variable `SSH_AUTH_INFO_0` holds the key(s) sshd used for its own publickey
+/// authentication. If one of them is trusted by `filter` (and, for a certificate, also
+/// passes full certificate validation) this returns true and authentication succeeds
+/// without a fresh challenge-response round.
+///
+/// sshd formats each entry as a line led by the method name, e.g.
+/// `publickey ssh-ed25519 AAAA...` or `publickey ssh-ed25519-cert-v01@openssh.com AAAA...`.
+/// A parse failure for any entry is non-fatal: the entry is skipped and authentication
+/// falls back to the normal challenge-response path rather than being denied.
 fn check_sshd_special_case(
     service: Option<String>,
     filter: &IdentityFilter,
     env: impl Environment,
+    principal: &str,
 ) -> Result<bool> {
     match service {
         Some(service) => {
@@ -135,15 +156,49 @@ fn check_sshd_special_case(
         }
         None => return Ok(false),
     }
-    let Some(key) = env.get_env("SSH_AUTH_INFO_0") else {
+    let Some(info) = env.get_env("SSH_AUTH_INFO_0") else {
         debug!("calling service is sshd but SSH_AUTH_INFO_0 is not set");
         return Ok(false);
     };
-    Ok(filter.filter(
-        &PublicKey::from_openssh(&key)
-            .context("failed to parse key in SSH_AUTH_INFO_0 environment variable")?
-            .into(),
-    ))
+    for line in info.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        // Drop the leading method token ("publickey ") if present; tolerate its absence.
+        let entry = line.strip_prefix("publickey ").unwrap_or(line);
+        let identity = match parse_auth_info_identity(entry) {
+            Ok(identity) => identity,
+            Err(e) => {
+                debug!("failed to parse SSH_AUTH_INFO_0 entry: {e:?}");
+                continue;
+            }
+        };
+        if !filter.filter(&identity) {
+            continue;
+        }
+        match &identity {
+            Identity::Certificate(cert) => {
+                if validate_cert(cert, SystemTime::now(), principal) {
+                    return Ok(true);
+                }
+            }
+            Identity::PublicKey(_) => return Ok(true),
+        }
+    }
+    Ok(false)
+}
+
+/// Parse a single `SSH_AUTH_INFO_0` entry (with the leading method token already removed)
+/// into an [`Identity`], choosing a certificate or a plain public key based on the key
+/// type token.
+fn parse_auth_info_identity(entry: &str) -> Result<Identity<'static>> {
+    let key_type = entry.split_whitespace().next().unwrap_or_default();
+    if key_type.ends_with("-cert-v01@openssh.com") {
+        Ok(Certificate::from_openssh(entry)?.into())
+    } else {
+        Ok(PublicKey::from_openssh(entry)?.into())
+    }
 }
 
 fn get_path(args: &Args) -> Result<String> {
@@ -167,48 +222,71 @@ fn get_path(args: &Args) -> Result<String> {
 mod tests {
     use crate::check_sshd_special_case;
     use crate::filter::IdentityFilter;
-    use crate::test::{CannedEnv, DummyEnv, data};
+    use crate::test::{CERT_STR, CannedEnv, DummyEnv, data};
     use anyhow::Result;
     use std::path::Path;
+
+    // SSH_AUTH_INFO_0-style entries (method token + key) as sshd would set them.
+    const AUTH_INFO_MATCHING: &str = "publickey ssh-ed25519 \
+        AAAAC3NzaC1lZDI1NTE5AAAAIObUcRy1Nv6fz4xnAXqOaFL/A+gGM9OF+l2qpsDPmMlU test@ed25519";
+    const AUTH_INFO_OTHER: &str = "publickey ssh-ed25519 \
+        AAAAC3NzaC1lZDI1NTE5AAAAIBEnbbUON/7pV3uMtWfP3eWk9xGVa7qhEb50a5p0zDSk test-ca-key";
 
     #[test]
     fn test_check_sshd_special_case() -> Result<()> {
         let key = Path::new(data!("id_ed25519.pub"));
         let filter = IdentityFilter::from_authorized_file(key)?;
 
-        // happy path, keys match
+        // happy path: a "publickey <type> <b64>" entry matching a trusted key
         assert!(check_sshd_special_case(
             Some("sshd".to_string()),
             &filter,
-            CannedEnv::new(vec![include_str!(data!("id_ed25519.pub"))])
+            CannedEnv::new(vec![AUTH_INFO_MATCHING]),
+            "principal",
         )?);
 
-        // different key
+        // a different, untrusted key
         assert!(!check_sshd_special_case(
             Some("sshd".to_string()),
             &filter,
-            CannedEnv::new(vec![include_str!(data!("ca_key.pub"))])
+            CannedEnv::new(vec![AUTH_INFO_OTHER]),
+            "principal",
         )?);
 
-        // if service is not set, return false
-        assert!(!check_sshd_special_case(None, &filter, DummyEnv)?);
+        // if service is not set, return false (env is never consulted)
+        assert!(!check_sshd_special_case(
+            None,
+            &filter,
+            DummyEnv,
+            "principal"
+        )?);
 
-        // if service is not set to something other than sshd, return false
+        // if service is something other than sshd, return false
         assert!(!check_sshd_special_case(
             Some("something".to_string()),
             &filter,
-            DummyEnv
+            DummyEnv,
+            "principal",
         )?);
 
-        // not a key
-        assert!(
-            check_sshd_special_case(
-                Some("sshd".to_string()),
-                &filter,
-                CannedEnv::new(vec!["invalid"])
-            )
-            .is_err()
-        );
+        // an unparseable entry is non-fatal: no match, but not an error
+        assert!(!check_sshd_special_case(
+            Some("sshd".to_string()),
+            &filter,
+            CannedEnv::new(vec!["invalid"]),
+            "principal",
+        )?);
+
+        // a CA-trusted but expired certificate: the filter matches it, but full cert
+        // validation rejects it, so the result is false (exercises the certificate path)
+        let cert_filter =
+            IdentityFilter::from_authorized_file(Path::new(data!("authorized_keys")))?;
+        assert!(!check_sshd_special_case(
+            Some("sshd".to_string()),
+            &cert_filter,
+            CannedEnv::new(vec![CERT_STR]),
+            "principal",
+        )?);
 
         Ok(())
     }

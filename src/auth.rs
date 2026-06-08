@@ -58,7 +58,11 @@ fn sign_and_verify(identity: Identity<'static>, agent: &mut impl SSHAgent) -> Re
     Ok(true)
 }
 
-fn validate_cert(cert: &ssh_key::Certificate, when: SystemTime, principal: &str) -> bool {
+pub(crate) fn validate_cert(
+    cert: &ssh_key::Certificate,
+    when: SystemTime,
+    principal: &str,
+) -> bool {
     let ca_key = cert.signature_key();
 
     if let Err(e) = cert.validate_at(

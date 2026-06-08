@@ -45,6 +45,36 @@ For other users, it is entirely possible to simply invoke `cargo build --release
 `target/release/libpam_ssh_agent.so` to the directory that holds your pam modules. Mine is in 
 `/lib/x86_64-linux-gnu/security`.
 
+### Building and installing on macOS
+
+This module also builds and runs on macOS, which uses OpenPAM rather than Linux-PAM. A few
+things differ from Linux:
+
+* `cargo build --release` produces a **`.dylib`**, not a `.so`:
+  `target/release/libpam_ssh_agent.dylib`. The bundled `build.rs` automatically passes the
+  `-undefined dynamic_lookup` linker flag that macOS requires for a PAM module — the `pam_*`
+  symbols are resolved by the PAM runtime at load time, and without the flag the link fails
+  with `Undefined symbols: _pam_get_item`.
+* Apple's System Integrity Protection makes `/usr/lib/pam` read-only, so install the module
+  elsewhere and refer to it by **absolute path**:
+  ```sh
+  cargo build --release
+  sudo mkdir -p /usr/local/lib/pam
+  sudo cp target/release/libpam_ssh_agent.dylib /usr/local/lib/pam/pam_ssh_agent.so
+  ```
+  (OpenPAM loads Mach-O modules that conventionally carry a `.so` name.)
+* Wire it into a service under `/etc/pam.d`. On recent macOS the clean way to add it to
+  `sudo` is `/etc/pam.d/sudo_local` (copy it from `/etc/pam.d/sudo_local.template`):
+  ```
+  auth  sufficient  /usr/local/lib/pam/pam_ssh_agent.so  file=/etc/security/authorized_keys
+  ```
+* Use an `ssh-agent` that exposes a Secure Enclave key such as
+  [Secretive](https://github.com/maxgoedjen/secretive), and make sure `SSH_AUTH_SOCK` is set
+  in the environment that runs `sudo`.
+
+> The build and the full test suite (both crypto backends) pass on macOS. Verify the runtime
+> PAM load on your own machine, since PAM integration depends on local configuration.
+
 ## Example Usage
 
 * First, install the software using one of the methods above.
