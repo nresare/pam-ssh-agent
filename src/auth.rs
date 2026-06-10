@@ -23,11 +23,11 @@ pub fn authenticate(
 ) -> Result<bool> {
     for identity in agent.list_identities()? {
         if filter.filter(&identity) {
-            if let Certificate(cert) = &identity {
-                if !validate_cert(cert, SystemTime::now(), principal) {
-                    info!("Cert not valid, skipping");
-                    continue;
-                }
+            if let Certificate(cert) = &identity
+                && !validate_cert(cert, SystemTime::now(), principal)
+            {
+                info!("Cert not valid, skipping");
+                continue;
             }
             // Allow sign_and_verify() to return RemoteFailure (key not loaded / present),
             // and try the next configured key
@@ -71,6 +71,11 @@ fn validate_cert(cert: &ssh_key::Certificate, when: SystemTime, principal: &str)
         return false;
     }
 
+    if !cert.cert_type().is_user() {
+        info!("Cert type is not user, are you trying to authenticate with a host cert?");
+        return false;
+    }
+
     if !cert.valid_principals().iter().any(|p| p == principal) {
         info!("Cert matches but '{principal}' is not in the list of valid principals.");
         return false;
@@ -89,11 +94,11 @@ mod test {
     use crate::auth::validate_cert;
     use crate::test::{CERT_STR, data};
     use anyhow::Result;
-    use ssh_key::Certificate;
+    use ssh_key::{Certificate, PrivateKey, certificate};
     use std::time::{Duration, SystemTime};
 
     #[test]
-    fn test_parse_cert() -> Result<()> {
+    fn test_validate_cert() -> Result<()> {
         let cert = Certificate::from_openssh(CERT_STR)?;
         // within validity: 2025-07-15 12:00:00
         assert!(validate_cert(&cert, st(1752577200), "principal"));
@@ -109,6 +114,22 @@ mod test {
         bytes[90] = 0x42;
         let cert = Certificate::from_openssh(&String::from_utf8_lossy(bytes.as_slice()))?;
         // within validity: 2025-07-15 12:00:00 but the data is scrambled
+        assert!(!validate_cert(&cert, st(1752577200), "principal"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_validate_cert_rejects_host_cert() -> Result<()> {
+        let cert_key = PrivateKey::from_openssh(include_str!(data!("cert_key")))?;
+        let ca_key = PrivateKey::from_openssh(include_str!(data!("ca_key")))?;
+
+        let mut cert_builder =
+            certificate::Builder::new(vec![42; 16], cert_key.public_key(), 1749985200, 1755255600)?;
+        cert_builder.cert_type(certificate::CertType::Host)?;
+        cert_builder.valid_principal("principal")?;
+        let cert = cert_builder.sign(&ca_key)?;
+
         assert!(!validate_cert(&cert, st(1752577200), "principal"));
 
         Ok(())

@@ -2,7 +2,7 @@
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-if [ "$1" != "user" ]; then
+if [ "$1" != ${USER} ]; then
   exit 1
 fi
 

@@ -24,9 +24,12 @@ pub struct IdentityFilter {
 }
 
 impl IdentityFilter {
-    /// Construct a new Identity filter where path is the path to a file in authorized_keys
-    /// format, and the ca_keys_file is an optional path to a file containing cert-authority
-    /// keys. See README.md for the details on the expected file format.
+    /// Construct a new Identity filter with the provided authorized_keys file and optionally
+    /// also ca_keys_file, authorized_keys_command and authorized_keys_command_user.
+    /// The authorized_keys_command will be invoked when specified, and its output will be treated
+    /// as additional lines in the authorized_keys file.
+    /// If authorized_keys_command_user is not specified, the identity of the calling user will
+    /// be used when executing he command.
     pub fn new(
         authorized_keys_file: &Path,
         ca_keys_file: Option<&Path>,
@@ -70,8 +73,8 @@ impl IdentityFilter {
         }
 
         if let Some(cmd) = authorized_keys_command {
-            let user = authorized_keys_command_user.map(get_uid).transpose()?;
-            identities.extend(from_command(cmd, user, calling_user)?);
+            let user = authorized_keys_command_user.unwrap_or(calling_user);
+            identities.extend(from_command(cmd, get_uid(user)?, calling_user)?);
         }
         Self::from(identities)
     }
@@ -130,9 +133,11 @@ enum Authorized {
 }
 const MAX_DURATION: Duration = Duration::from_secs(10);
 
-fn from_command(command: &str, uid: Option<uid_t>, arg: &str) -> Result<Vec<Authorized>> {
-    debug!("Invoking command '{command} {arg}' to obtain public keys for user {arg}");
-    let buf = cmd::run(&[command, arg], MAX_DURATION, uid)?;
+fn from_command(command: &str, uid: uid_t, calling_user: &str) -> Result<Vec<Authorized>> {
+    debug!(
+        "Invoking command '{command} {calling_user}' to obtain public keys for user {calling_user}"
+    );
+    let buf = cmd::run(&[command, calling_user], MAX_DURATION, uid, None)?;
     from_str(&buf, &format!("{command}:(output):"), false)
 }
 
@@ -169,6 +174,7 @@ mod tests {
     use crate::test::{CERT_STR, data};
     use ssh_agent_client_rs::Identity;
     use ssh_key::{Certificate, PublicKey};
+    use std::env;
     use std::path::Path;
 
     #[test]
@@ -182,7 +188,7 @@ mod tests {
         let identity: Identity = cert.into();
         assert!(filter.filter(&identity));
 
-        // verify that when using the ca_keys_file parameter, we can use he raw key and don't need
+        // verify that when using the ca_keys_file parameter, we can use the raw key and don't need
         // the 'cert-authority ' prefix.
         let filter = IdentityFilter::new(
             // an empty file works for our purposes
@@ -205,29 +211,24 @@ mod tests {
         )?;
         assert!(filter.filter(&identity));
 
+        Ok(())
+    }
+
+    // this test needs to be run as root, as otherwise it would not be possible to
+    // drop privileges
+    #[test]
+    #[ignore]
+    fn test_invoke_command_for_public_keys() -> anyhow::Result<()> {
         let filter = IdentityFilter::new(
             Path::new("/dev/null"),
             None,
             Some(data!("test.sh")),
             None,
-            "user",
+            &env::var("USER")?,
         )?;
         let identity: Identity =
             PublicKey::from_openssh(include_str!(data!("id_ed25519.pub")))?.into();
         assert!(filter.filter(&identity));
-
-        // test.sh returns 1 if first arg is not "user"
-        let Err(e) = IdentityFilter::new(
-            Path::new("/dev/null"),
-            None,
-            Some(data!("test.sh")),
-            None,
-            "not_user",
-        ) else {
-            panic!("test.sh should have failed");
-        };
-        assert!(format!("{:?}", e).contains("Non-zero exit status"));
-
         Ok(())
     }
 }

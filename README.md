@@ -1,6 +1,6 @@
 # A PAM module for authenticating using ssh-agent
 
-The goal of this project is to provide a PAM authentication module determining the identity of a user based on a
+This project provides a PAM authentication module determining the identity of a user based on a
 signature request and response sent via the ssh-agent protocol to a potentially remote `ssh-agent`.
 
 One scenario that this module can be used in is to grant escalated privileges on a remote system accessed using `ssh`
@@ -10,9 +10,9 @@ server. Combined with a setup where the private part of an authentication keypai
 a YubiKey, a TPM chip, or the macOS secure enclave, this can provide a high level of security as well as convenience.
 I use the [Secretive](https://github.com/maxgoedjen/secretive) app on macOS for this purpose.
 
-This project is re-implementation of the [pam_ssh_agent_auth](https://github.com/jbeverly/pam_ssh_agent_auth) module but does not share any code with that project.
+This project is a re-implementation of the [pam_ssh_agent_auth](https://github.com/jbeverly/pam_ssh_agent_auth) module but does not share any code with that project.
 We are pretty close to covering all the features of the original implementation, along with some additional features
-such as SSH Certificate based authentication.
+such as authentication using SSH Certificates.
 
 ## Project goals
 
@@ -55,9 +55,22 @@ For other users, it is entirely possible to simply invoke `cargo build --release
 * Replace the `common-auth` include in `/etc/pam.d/sudo` with `auth  required   pam_ssh_agent.so`
 * Configure `sudo` to not drop the `SSH_AUTH_SOCK` environment variable by
   adding `Defaults env_keep += "SSH_AUTH_SOCK"` to the file `/etc/sudoers.d/ssh_agent_env`
-* Add the public key that your ssh-agent knows about to `/etc/security/authorized_keys`
-* If you are using a systemd based linux system, you can observe the output of this crate using 
+* Add a public key that your ssh-agent knows about to `/etc/security/authorized_keys`
+* If you are using a linux system based on systemd, you can observe the output of this crate using 
   `journalctl -f --facility authpriv`
+
+## Using a command to dynamically obtain trusted keys
+
+This plugin can be configured with `authorized_keys_command` which will call an external binary to obtain
+trusted keys for authentication. An example of such a program is [sss_ssh_authorizedkeys](https://manpages.debian.org/testing/sssd-common/sss_ssh_authorizedkeys.1.en.html)
+
+Since this module is expected to be invoked in a privileged context, some care has been taken to reduce
+the risks involved in invoking external commands with potentially eleveated privilege in the following way:
+
+By default, the external command is invoked with the privileges of the calling user. The group id is also set
+to the group with group id `65534`, the default group id of least privilege in the Linux kernel. 
+It is recommended that the last  privileged user is specified using the `authorized_keys_command_user`, 
+for example `nobody`.
 
 ## Configuration options
 
@@ -72,12 +85,12 @@ configuration file in `/etc/pam.d`. pam_ssh_agent currently understands the foll
   include any key options prefixes. See below for further information about certificate
   authentication and the subtle format difference in file format compared to `file`.
 * `authorized_keys_command=/path/executable` Specify a command that should be run to dynamically
-  retrieve/prepare a list of authorized public keys. The command will be passed a single argument
-  containing the username of the user requesting authentication. The command should print keys to
-  STDOUT in authorized_keys format.
-* `autorizxed_keys_command_user=NON_PRIVILEGED_USER` If set, specifies the user that `authorized_keys_command`
+  retrieve/prepare a list of authorized public keys. When invoked, the username of the 
+  requesting user will be passed as a single argument. The command should print keys to STDOUT in 
+  authorized_keys format.
+* `authorized_keys_command_user=NON_PRIVILEGED_USER` If set, specifies the user that `authorized_keys_command`
   will be executed as. If not specified, the command will be run as the requesting user.
-* `default_ssh_auth_sock=/path/to/ssh_agent_unix_socket` the path to use if the `SSH_AUTH_SOCKET` environment variable
+* `default_ssh_auth_sock=/path/to/ssh_agent_unix_socket` the path to use if the `SSH_AUTH_SOCK` environment variable
   is not set.
 
 ## SSH Certificates
@@ -88,12 +101,13 @@ be used. A certificate is considered valid if the following conditions are met:
 * The current time is within the validity period
 * The certificate signature is valid and was made by a trusted certificate key
 * The username provided to the plugin by the PAM_USER item is in the certificate's list of principals
+* The certificate type is specified to "User"
 
 > [!NOTE]
-> Please note that as of now certificates need to have an expiry time. Once the fix to
+> Please note that as of now, certificates need to have an expiry time. Once the fix to
 > [this bug](https://github.com/RustCrypto/SSH/issues/174) has made it into a stable release
-> we can relax this requirement but for now just add an expiry time very far into the future to accomplish
-> the same thing.
+> we can relax this requirement but for now just add an expiry time very far into the future to if you 
+> want to emulate a certificat without expiry time.
 
 Just like with OpenSSH there are two ways to specify a certificate authority key. In the same way as the
 authorized_keys format, a certificate authority key can be specified alongside the regular ssh keys by being

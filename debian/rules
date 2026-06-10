@@ -1,6 +1,6 @@
 #!/usr/bin/make -f
 
-RUST_VERSION=1.85
+RUST_VERSION=1.91
 
 export CARGO_VENDOR_DIR=vendor
 export PATH=/usr/lib/rust-$(RUST_VERSION)/bin:/usr/bin
@@ -16,6 +16,12 @@ override_dh_auto_test:
 override_dh_auto_clean:
 	cargo clean
 
+# recent versions of cargo validates the checksum files in the vendor directory,
+# and a lot of packages contain .orig files. This override instructs dh_clean to
+# not remove those as it will make cargo build fail as it is missing some referenced
+# files
+override_dh_clean:
+	dh_clean -O--buildsystem=cargo --exclude=orig
 
 # this package is a bit special since it builds a native shared library, something
 # that the dh_cargo build tooling can not yet handle

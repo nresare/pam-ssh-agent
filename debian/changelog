@@ -1,3 +1,16 @@
+pam-ssh-agent (0.9.7-1~noble) noble; urgency=medium
+
+  * Tighten security by dropping privileges before invoking external command
+  * Only accept ssh certificates of type User 
+
+ -- Noa Resare <noa@resare.com>  Sun,  7 Jun 2026 17:54:02 +0000
+
+pam-ssh-agent (0.9.6-1~noble) noble; urgency=medium
+
+  * Updated dependencies and rust version
+
+ -- Noa Resare <noa@resare.com>  Sun,  7 Jun 2026 09:03:08 +0000
+
 pam-ssh-agent (0.9.5-1~noble) noble; urgency=medium
 
   * Ensure log init only happens once
