@@ -174,6 +174,8 @@ mod tests {
     #[test]
     fn test_check_sshd_special_case() -> Result<()> {
         let key = Path::new(data!("id_ed25519.pub"));
+        // make sure root owns the file before checking
+        std::os::unix::fs::chown(key, Some(0), Some(0))?;
         let filter = IdentityFilter::from_authorized_file(key)?;
 
         // happy path, keys match

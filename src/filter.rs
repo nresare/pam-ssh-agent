@@ -184,10 +184,14 @@ mod tests {
     use std::env;
     use std::path::Path;
 
+    // This test needs to be run as root, as otherwise it would not be possible to
+    // chown / chmod the identity file
     #[test]
     fn test_read_public_keys() -> anyhow::Result<()> {
         let path = Path::new(data!("authorized_keys"));
 
+        // make sure root owns the file before checking
+        std::os::unix::fs::chown(path, Some(0), Some(0))?;
         let filter = IdentityFilter::from_authorized_file(path)?;
 
         // authorized_keys contains the certificate authority key for the CERT_STR cert
