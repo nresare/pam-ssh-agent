@@ -183,6 +183,8 @@ mod tests {
     use ssh_key::{Certificate, PublicKey};
     use std::env;
     use std::path::Path;
+    use std::fs::Permissions;
+    use std::os::unix::fs::PermissionsExt;
 
     // This test needs to be run as root, as otherwise it would not be possible to
     // chown / chmod the identity file
@@ -192,6 +194,9 @@ mod tests {
 
         // make sure root owns the file before checking
         std::os::unix::fs::chown(path, Some(0), Some(0))?;
+        // Make sure file permissions are 600
+        let perms = Permissions::from_mode(0o600);
+        std::fs::set_permissions(path, perms)?;
         let filter = IdentityFilter::from_authorized_file(path)?;
 
         // authorized_keys contains the certificate authority key for the CERT_STR cert
