@@ -1,7 +1,6 @@
 use crate::cmd;
 use crate::environment::get_uid;
-use anyhow::Result;
-use anyhow::anyhow;
+use anyhow::{anyhow, Context, Result};
 use log::{debug, error, info};
 use ssh_agent_client_rs::Identity;
 use ssh_agent_client_rs::Identity::{Certificate, PublicKey};
@@ -36,9 +35,13 @@ impl IdentityFilter {
         authorized_keys_command: Option<&str>,
         authorized_keys_command_user: Option<&str>,
         calling_user: &str,
+        ignore_file_permissions: bool,
     ) -> Result<Self> {
         let mut identities = Vec::new();
-        if file_meets_requirements(authorized_keys_file) {
+        let check_file_result = check_file(authorized_keys_file, ignore_file_permissions);
+        if check_file_result.is_err() {
+            error!("{}", check_file_result.unwrap_err())
+        } else if check_file_result.is_ok() {
             identities.extend(from_file(authorized_keys_file, false)?);
         } else if ca_keys_file.is_none() && authorized_keys_command.is_none() {
             info!("No valid keys for authentication, {authorized_keys_file:?} does not exist");
@@ -55,8 +58,18 @@ impl IdentityFilter {
         Self::from(identities)
     }
 
-    pub fn from_authorized_file(authorized_keys_file: &Path) -> Result<Self> {
-        Self::new(authorized_keys_file, None, None, None, "")
+    pub fn from_authorized_file(
+        authorized_keys_file: &Path,
+        ignore_file_permissions: bool,
+    ) -> Result<Self> {
+        Self::new(
+            authorized_keys_file,
+            None,
+            None,
+            None,
+            "",
+            ignore_file_permissions,
+        )
     }
 
     fn from(authorized: Vec<Authorized>) -> Result<Self> {
@@ -126,35 +139,33 @@ fn from_file(filename: &Path, ca_keys: bool) -> Result<Vec<Authorized>> {
     )
 }
 
-fn file_meets_requirements(filename: &Path) -> bool {
-    if filename.exists() {
-        if let Ok(mdata) = std::fs::metadata(filename) {
-            if mdata.is_file() {
-                // Using a bitmask on mdata permissions since it returns something like 0o100600
-                let file_perms: u32 = mdata.permissions().mode() & 0o777;
-                if file_perms == 0o600 {
-                    if mdata.uid() == 0 && mdata.gid() == 0 {
-                        return true;
-                    } else {
-                        error!(
-                            "File {:?} should be owned by uid 0 and gid 0 (root:root)",
-                            filename
-                        );
-                    }
-                } else {
-                    error!(
-                        "File {:?} should have permissions 600 but has permissions {:o}",
-                        filename, file_perms
-                    );
-                }
-            } else {
-                error!("Path {:?} is not a valid file", filename);
-            }
-        } else {
-            error!("Cannot get metadata from file {:?}", filename);
-        }
+fn check_file(filename: &Path, ignore_file_permissions: bool) -> Result<()> {
+    if !filename.exists() {
+        return Err(anyhow!("File {:?} not found", filename));
     }
-    false
+    let mdata = std::fs::metadata(filename)
+        .with_context(|| format!("File {:?} metadata cannot be read", filename))?;
+    if !mdata.is_file() {
+        return Err(anyhow!("Path {:?} is not a valid file", filename));
+    }
+    if ignore_file_permissions {
+        return Ok(());
+    }
+    let file_perms: u32 = mdata.permissions().mode() & 0o777;
+    if file_perms != 0o600 {
+        return Err(anyhow!(
+            "File {:?} should have permissions 600 but has permissions {:o}",
+            filename,
+            file_perms
+        ));
+    }
+    if mdata.uid() != 0 || mdata.gid() != 0 {
+        return Err(anyhow!(
+            "File {:?} should be owned by uid 0 and gid 0 (root:root)",
+            filename
+        ));
+    }
+    Ok(())
 }
 
 fn from_str(buf: &str, what: &str, ca_keys: bool) -> Result<Vec<Authorized>> {
@@ -177,27 +188,18 @@ fn from_str(buf: &str, what: &str, ca_keys: bool) -> Result<Vec<Authorized>> {
 
 #[cfg(test)]
 mod tests {
+    use crate::file_permissions::set_file_permissions;
     use crate::filter::IdentityFilter;
     use crate::test::{data, CERT_STR};
     use ssh_agent_client_rs::Identity;
     use ssh_key::{Certificate, PublicKey};
     use std::env;
     use std::path::Path;
-    use std::fs::Permissions;
-    use std::os::unix::fs::PermissionsExt;
 
-    // This test needs to be run as root, as otherwise it would not be possible to
-    // chown / chmod the identity file
     #[test]
     fn test_read_public_keys() -> anyhow::Result<()> {
         let path = Path::new(data!("authorized_keys"));
-
-        // make sure root owns the file before checking
-        std::os::unix::fs::chown(path, Some(0), Some(0))?;
-        // Make sure file permissions are 600
-        let perms = Permissions::from_mode(0o600);
-        std::fs::set_permissions(path, perms)?;
-        let filter = IdentityFilter::from_authorized_file(path)?;
+        let filter = IdentityFilter::from_authorized_file(path, true)?;
 
         // authorized_keys contains the certificate authority key for the CERT_STR cert
         let cert = Certificate::from_openssh(CERT_STR)?;
@@ -213,6 +215,7 @@ mod tests {
             None,
             None,
             "",
+            true,
         )?;
         assert!(filter.filter(&identity));
 
@@ -224,6 +227,7 @@ mod tests {
             None,
             None,
             "",
+            true,
         )?;
         assert!(filter.filter(&identity));
 
@@ -241,10 +245,71 @@ mod tests {
             Some(data!("test.sh")),
             None,
             &env::var("USER")?,
+            true,
         )?;
         let identity: Identity =
             PublicKey::from_openssh(include_str!(data!("id_ed25519.pub")))?.into();
         assert!(filter.filter(&identity));
+        Ok(())
+    }
+
+       // This test needs to be run as root, as otherwise it would not be possible to
+    // chown / chmod the identity file
+    #[test]
+    #[ignore]
+    fn test_read_public_keys_with_permissions() -> anyhow::Result<()> {
+        let path = Path::new(data!("authorized_keys"));
+
+        let perm_result = set_file_permissions(path, 0o700, 0, 0);
+        assert!(perm_result.is_ok());
+        let filter = IdentityFilter::from_authorized_file(path, false)?;
+        assert!(filter.keys.len() == 0);
+
+        let perm_result = set_file_permissions(path, 0o600, 1000, 0);
+        assert!(perm_result.is_ok());
+        let filter = IdentityFilter::from_authorized_file(path, false)?;
+        assert!(filter.keys.len() == 0);
+
+        let perm_result = set_file_permissions(path, 0o600, 0, 1000);
+        assert!(perm_result.is_ok());
+        let filter = IdentityFilter::from_authorized_file(path, false)?;
+        assert!(filter.keys.len() == 0);
+
+        let perm_result = set_file_permissions(path, 0o600, 0, 0);
+        assert!(perm_result.is_ok());
+        let filter = IdentityFilter::from_authorized_file(path, false)?;
+        assert!(filter.keys.len() > 0);
+
+        // authorized_keys contains the certificate authority key for the CERT_STR cert
+        let cert = Certificate::from_openssh(CERT_STR)?;
+        let identity: Identity = cert.into();
+        assert!(filter.filter(&identity));
+
+        // verify that when using the ca_keys_file parameter, we can use the raw key and don't need
+        // the 'cert-authority ' prefix.
+        let filter = IdentityFilter::new(
+            // an empty file works for our purposes
+            Path::new("/dev/null"),
+            Some(Path::new(data!("ca_key.pub"))),
+            None,
+            None,
+            "",
+            false,
+        )?;
+        assert!(filter.filter(&identity));
+
+        // check that we the fact that the authorized_keys file does not exist if ca_keys_file does
+        let filter = IdentityFilter::new(
+            // an empty file works for our purposes
+            Path::new("/does/not/exist"),
+            Some(Path::new(data!("ca_key.pub"))),
+            None,
+            None,
+            "",
+            false,
+        )?;
+        assert!(filter.filter(&identity));
+
         Ok(())
     }
 }
