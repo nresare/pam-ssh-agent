@@ -12,6 +12,7 @@ mod pamext;
 #[cfg(test)]
 mod test;
 mod verify;
+pub mod file_permissions;
 
 pub use crate::agent::SSHAgent;
 pub use crate::auth::authenticate;
@@ -109,6 +110,7 @@ fn do_authenticate(args: &Args, handle: &PamHandle) -> Result<()> {
         args.authorized_keys_command.as_deref(),
         args.authorized_keys_command_user.as_deref(),
         &calling_user,
+        false,
     )?;
 
     if check_sshd_special_case(handle.get_service().ok(), &filter, UnixEnvironment)? {
@@ -168,20 +170,60 @@ mod tests {
     use crate::check_sshd_special_case;
     use crate::filter::IdentityFilter;
     use crate::test::{CannedEnv, DummyEnv, data};
+    use crate::file_permissions::set_file_permissions;
     use anyhow::Result;
     use std::path::Path;
-    use std::fs::Permissions;
-    use std::os::unix::fs::PermissionsExt;
 
     #[test]
     fn test_check_sshd_special_case() -> Result<()> {
         let key = Path::new(data!("id_ed25519.pub"));
-        // Make sure file permissions are 600
-        let perms = Permissions::from_mode(0o600);
-        std::fs::set_permissions(key, perms)?;
-        // make sure root owns the file before checking
-        std::os::unix::fs::chown(key, Some(0), Some(0))?;
-        let filter = IdentityFilter::from_authorized_file(key)?;
+        let filter = IdentityFilter::from_authorized_file(key, true)?;
+
+        // happy path, keys match
+        assert!(check_sshd_special_case(
+            Some("sshd".to_string()),
+            &filter,
+            CannedEnv::new(vec![include_str!(data!("id_ed25519.pub"))])
+        )?);
+
+        // different key
+        assert!(!check_sshd_special_case(
+            Some("sshd".to_string()),
+            &filter,
+            CannedEnv::new(vec![include_str!(data!("ca_key.pub"))])
+        )?);
+
+        // if service is not set, return false
+        assert!(!check_sshd_special_case(None, &filter, DummyEnv)?);
+
+        // if service is not set to something other than sshd, return false
+        assert!(!check_sshd_special_case(
+            Some("something".to_string()),
+            &filter,
+            DummyEnv
+        )?);
+
+        // not a key
+        assert!(
+            check_sshd_special_case(
+                Some("sshd".to_string()),
+                &filter,
+                CannedEnv::new(vec!["invalid"])
+            )
+            .is_err()
+        );
+
+        Ok(())
+    }
+
+    // This test needs to be run as root otherwise
+    // chown/chmod cannot be done on authorized key files
+    #[test]
+    #[ignore]
+    fn test_check_sshd_special_case_with_permissions() -> Result<()> {
+        let key = Path::new(data!("id_ed25519.pub"));
+        assert!(set_file_permissions(key, 0o600, 0, 0).is_ok());
+        let filter = IdentityFilter::from_authorized_file(key, false)?;
 
         // happy path, keys match
         assert!(check_sshd_special_case(
