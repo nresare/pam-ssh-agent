@@ -8,7 +8,7 @@ Once you're done, cd to the `autosfx` directory, so the `pam-ssh-agent-installer
 
 ```
 SETUP_VERSION=$(grep "^VERSION=" pam-ssh-agent-installer/setup.sh | cut -d'=' -f2)
-PACKAGE_VERSION=-2
+PACKAGE_VERSION=-1
 makeself --gzip --sha256 --notemp ./pam-ssh-agent-installer ./pam-ssh-agent-installer-${VERSION}${PACKAGE_VERSION}.sh "pam-ssh-agent ${VERSION}" ./setup.sh
 ```
 

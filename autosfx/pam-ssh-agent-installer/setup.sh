@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # pam-ssh-agent installer script for RHEL/Fedora/Debian
-# Script build 2026060201
+# Script build 2026071601
 
 LOG_FILE=/var/log/pam-ssh-agent-sfx.log
 SOURCE_PAM_LIB=libpam_ssh_agent.so
@@ -11,7 +11,7 @@ DEST_PAM_LIB=pam_ssh_agent.so
 
 # Compiled on RHEL7 so we get a very old glibc version
 # which should be compatible with almost all supported linux distributions as of 2026
-VERSION=0.95-glibc2.17+
+VERSION=0.97-glibc2.17+
 
 log() {
     __log_line="${1}"
