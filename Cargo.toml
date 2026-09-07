@@ -8,37 +8,37 @@ authors = ["Noa Resare"]
 description = """
 A PAM module that authenticates using the ssh-agent.
 """
-rust-version = "1.88"
+rust-version = "1.93"
 
 [lib]
 name = "pam_ssh_agent"
 crate-type = ["lib", "cdylib"]
 
 [dependencies]
-ssh-agent-client-rs = "1.1"
+ssh-agent-client-rs = { path = "../ssh-agent-client-rs" } 
 getrandom = "0.4"
-ssh-key = { version = "0.6", features = ["crypto"] }
+ssh-key = { version = "0.7.0-rc.11", features = ["crypto"] }
 # this version needs to match the version brought in by ssh-key
-signature = "2.2"
+signature = "3.0"
 anyhow = "1.0"
 pam-bindings = "0.3"
 # Keep this on 6.x until https://bugzilla.redhat.com/show_bug.cgi?id=2300127 is resolved
-syslog = "6.1"
+syslog = "7"
 uzers = { version = "0.12", default-features = false }
 hostname = { version = "0.4", default-features = false }
 log = "0.4"
 
 # The native-crypto dependencies
 openssl = { version = "0.10", optional = true }
-p256 = { version = "0.13", optional = true }
-p384 = { version = "0.13", optional = true }
-p521 = { version = "0.13", optional = true }
+p256 = { version = "0.14", optional = true }
+p384 = { version = "0.14", optional = true }
+p521 = { version = "0.14", optional = true }
 wait-timeout = "0.2"
 
 [dev-dependencies]
-base64 = "0.22"
-# this version needs to match the version brought in by ssh-key
-ssh-encoding = "0.2"
+base64 = "0.23"
+# this version needs to match the version brought in by ssh-key
+ssh-encoding = "0.3"
 env_logger = "0.11"
 
 [features]

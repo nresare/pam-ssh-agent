@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use log::{Level, Log, Metadata, Record};
 use std::env;
 use std::fmt::Display;
@@ -29,7 +29,7 @@ pub fn init_logging(pam_service: String) -> anyhow::Result<()> {
 
 fn init_impl(pam_service: String) -> anyhow::Result<()> {
     let logger = syslog::unix(PrefixFormatter::new(Facility::LOG_AUTHPRIV, &pam_service))
-        .map_err(|e| anyhow!("Failed to set up log: {}", e.description()))?;
+        .context("Failed to set up log")?;
     log::set_boxed_logger(Box::new(PrefixWrappingLogger::new(logger)))?;
     log::set_max_level(log::LevelFilter::Info);
     Ok(())
