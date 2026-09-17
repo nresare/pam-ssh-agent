@@ -18,7 +18,7 @@ crate-type = ["lib", "cdylib"]
 ssh-agent-client-rs = "1.1"
 getrandom = "0.4"
 ssh-key = { version = "0.6", features = ["crypto"] }
-# this version needs to match the version brought in by ssh-key
+# this version needs to match the version brought in by ssh-key
 signature = "2.2"
 anyhow = "1.0"
 pam-bindings = "0.3"
@@ -33,11 +33,10 @@ openssl = { version = "0.10", optional = true }
 p256 = { version = "0.13", optional = true }
 p384 = { version = "0.13", optional = true }
 p521 = { version = "0.13", optional = true }
-wait-timeout = "0.2"
 
 [dev-dependencies]
 base64 = "0.22"
-# this version needs to match the version brought in by ssh-key
+# this version needs to match the version brought in by ssh-key
 ssh-encoding = "0.2"
 env_logger = "0.11"
 

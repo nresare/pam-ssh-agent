@@ -2,9 +2,10 @@ use anyhow::{Result, anyhow};
 use log::warn;
 use std::io::Read;
 use std::os::unix::process::CommandExt;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
+use std::thread::sleep;
+use std::time;
 use std::time::Duration;
-use wait_timeout::ChildExt;
 
 // RedHat and Debian derived distributions have different names for the least privilege group,
 // but the numeric value seems to be the same, derived from /proc/sys/fs/overflowgid
@@ -32,9 +33,10 @@ pub fn run(
 
     let mut child = cmd.spawn()?;
 
-    match child.wait_timeout(timeout)? {
+    match child_timeout(&mut child, timeout)? {
         None => {
             child.kill()?;
+            child.wait()?;
             Err(anyhow!(
                 "Timed out waiting for command '{}' after {:?}",
                 command[0],
@@ -73,6 +75,19 @@ pub fn run(
                 ))?
             }
         }
+    }
+}
+
+fn child_timeout(child: &mut Child, timeout: Duration) -> Result<Option<ExitStatus>> {
+    let before = time::Instant::now();
+    loop {
+        if let Some(result) = child.try_wait()? {
+            return Ok(Some(result));
+        }
+        if before.elapsed() > timeout {
+            return Ok(None);
+        }
+        sleep(Duration::from_millis(10));
     }
 }
 
