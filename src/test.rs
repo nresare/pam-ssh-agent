@@ -16,6 +16,8 @@ use std::collections::VecDeque;
 use uzers::uid_t;
 
 pub(crate) const CERT_STR: &str = include_str!(data!("cert.pub"));
+pub(crate) const CERT_STR_PRINCIPALS_1_3: &str = include_str!(data!("cert_principal_1_3.pub"));
+pub(crate) const CERT_STR_PRINCIPALS_2_4: &str = include_str!(data!("cert_principal_2_4.pub"));
 
 macro_rules! canned {
     ($name:ident) => {

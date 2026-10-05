@@ -100,7 +100,9 @@ be used. A certificate is considered valid if the following conditions are met:
 
 * The current time is within the validity period
 * The certificate signature is valid and was made by a trusted certificate key
-* The username provided to the plugin by the PAM_USER item is in the certificate's list of principals
+* The username provided to the plugin by the PAM_USER item is in the certificate's list of principals,
+  unless the trusted certificate authority key restricts the principals it may authenticate, see
+  [Restricting principals](#restricting-principals) below
 * The certificate type is specified to "User"
 
 > [!NOTE]
@@ -116,7 +118,30 @@ that the key is prefixed with `cert-authority` followed by a space and the key i
 
 The second way to specify certificate authority keys work in the same way as the OpenSSH option `TrustedUserCAKeys`
 where keys without the `cert-authority` option are specified, one per line. To enable this mode of operation,
-set the `ca_keys_file` option.
+set the `ca_keys_file` option. Keys in that file may still be prefixed with options, including
+`cert-authority`, but they don't need to be.
+
+### Restricting principals
+
+By default, a certificate is accepted only if the name of the user being authenticated is among the
+certificate's principals. A certificate authority key can instead be configured with the list of
+principals it is trusted to authenticate, using the `principals` option in the same way as OpenSSH
+does in the authorized_keys format:
+
+```
+cert-authority,principals="admin,oncall" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... ca@example.com
+```
+
+When the `principals` option is present, a certificate signed by that key is accepted if at least one
+of the certificate's principals appears in the configured list, and the name of the user being
+authenticated is not taken into account. This makes it possible to grant access to an account using
+principals that are not named after it, for example to separate certificates that may be used to log
+in from certificates that may also be used with `sudo`.
+
+The list is comma separated, and the surrounding double quotes are required if it contains more than
+one principal. Specifying the `principals` option more than once on the same line is an error, and
+such a line is ignored. Note that unlike the `file` and `ca_keys_file` options, the principals list is
+not subject to the variable expansions mentioned below.
 
 ## Variable expansions
 
