@@ -1,5 +1,5 @@
 pub use crate::agent::SSHAgent;
-use crate::filter::IdentityFilter;
+use crate::filter::{AuthorizedRef, IdentityFilter};
 use crate::verify::verify;
 use Identity::{Certificate, PublicKey};
 use anyhow::{Result, anyhow};
@@ -7,6 +7,7 @@ use log::{debug, info};
 use ssh_agent_client_rs::{Error as SACError, Identity};
 use ssh_key::HashAlg;
 use std::time::{SystemTime, UNIX_EPOCH};
+use crate::certificate::CertData;
 
 const CHALLENGE_SIZE: usize = 32;
 
@@ -22,9 +23,10 @@ pub fn authenticate(
     principal: &str,
 ) -> Result<bool> {
     for identity in agent.list_identities()? {
-        if filter.filter(&identity) {
+        if let Ok(reference) = filter.filter(&identity) {
             if let Certificate(cert) = &identity
-                && !validate_cert(cert, SystemTime::now(), principal)
+                && let AuthorizedRef::CAKey(cert_ref) = reference
+                && !validate_cert(cert, SystemTime::now(), principal, cert_ref)
             {
                 info!("Cert not valid, skipping");
                 continue;
@@ -58,7 +60,7 @@ fn sign_and_verify(identity: Identity<'static>, agent: &mut impl SSHAgent) -> Re
     Ok(true)
 }
 
-fn validate_cert(cert: &ssh_key::Certificate, when: SystemTime, principal: &str) -> bool {
+fn validate_cert(cert: &ssh_key::Certificate, when: SystemTime, username: &str, reference: &CertData) -> bool {
     let ca_key = cert.signature_key();
 
     if let Err(e) = cert.validate_at(
@@ -76,9 +78,18 @@ fn validate_cert(cert: &ssh_key::Certificate, when: SystemTime, principal: &str)
         return false;
     }
 
-    if !cert.valid_principals().iter().any(|p| p == principal) {
-        info!("Cert matches but '{principal}' is not in the list of valid principals.");
-        return false;
+    if reference.has_principals(){
+        if !reference.principal_matches(cert.valid_principals()) {
+            info!("Cert matches but certificate principals are not in the list of valid principals.");
+            debug!("User certificate had {:?}, configured principals are {:?}", cert.valid_principals(), reference.principals().iter().collect::<Vec<&String>>());
+            return false;
+        }
+    } else {
+        if !cert.valid_principals().iter().any(|p| p == username) {
+            info!("Cert matches but {username} is not in the list of valid principals.");
+            debug!("User certificate had {:?}", cert.valid_principals());
+            return false;
+        }
     }
 
     if !cert.critical_options().is_empty() {
@@ -92,29 +103,39 @@ fn validate_cert(cert: &ssh_key::Certificate, when: SystemTime, principal: &str)
 #[cfg(test)]
 mod test {
     use crate::auth::validate_cert;
-    use crate::test::{CERT_STR, data};
+    use crate::test::{CERT_STR, CERT_STR_PRINCIPALS_1_3, CERT_STR_PRINCIPALS_2_4, data};
     use anyhow::Result;
     use ssh_key::{Certificate, PrivateKey, certificate};
     use std::time::{Duration, SystemTime};
+    use crate::certificate::{CertData, PrincipalsList};
 
     #[test]
     fn test_validate_cert() -> Result<()> {
         let cert = Certificate::from_openssh(CERT_STR)?;
+        let cert_1_3 = Certificate::from_openssh(CERT_STR_PRINCIPALS_1_3)?;
+        let cert_2_4 = Certificate::from_openssh(CERT_STR_PRINCIPALS_2_4)?;
+
         // within validity: 2025-07-15 12:00:00
-        assert!(validate_cert(&cert, st(1752577200), "principal"));
+        assert!(validate_cert(&cert, st(1752577200), "principal", &CertData::new(cert.signature_key().clone(), PrincipalsList::from(""))));
         // wrong principal
-        assert!(!validate_cert(&cert, st(1752577200), "another"));
+        assert!(!validate_cert(&cert, st(1752577200), "another", &CertData::new(cert.signature_key().clone(), PrincipalsList::from(""))));
         // too early: 2025-06-15 12:00:00
-        assert!(!validate_cert(&cert, st(1749985200), "principal"));
+        assert!(!validate_cert(&cert, st(1749985200), "principal", &CertData::new(cert.signature_key().clone(), PrincipalsList::from(""))));
         // too late: 2025-08-15 12:00:00
-        assert!(!validate_cert(&cert, st(1755255600), "principal"));
+        assert!(!validate_cert(&cert, st(1755255600), "principal", &CertData::new(cert.signature_key().clone(), PrincipalsList::from(""))));
 
         // let's change a byte and check if the signature verification fails
         let mut bytes = CERT_STR.as_bytes().to_vec();
         bytes[90] = 0x42;
         let cert = Certificate::from_openssh(&String::from_utf8_lossy(bytes.as_slice()))?;
         // within validity: 2025-07-15 12:00:00 but the data is scrambled
-        assert!(!validate_cert(&cert, st(1752577200), "principal"));
+        assert!(!validate_cert(&cert, st(1752577200), "principal", &CertData::new(cert.signature_key().clone(), PrincipalsList::from(""))));
+
+        // Check principal list validation
+        assert!(validate_cert(&cert_1_3, st(1752577200), "principal", &CertData::new(cert_1_3.signature_key().clone(), PrincipalsList::from("principal1,principal5"))));
+        assert!(!validate_cert(&cert_1_3, st(1752577200), "principal", &CertData::new(cert_1_3.signature_key().clone(), PrincipalsList::from("principal2,principal4"))));
+        assert!(!validate_cert(&cert_2_4, st(1752577200), "principal", &CertData::new(cert_1_3.signature_key().clone(), PrincipalsList::from("principal1,principal5"))));
+        assert!(validate_cert(&cert_2_4, st(1752577200), "principal", &CertData::new(cert_1_3.signature_key().clone(), PrincipalsList::from("principal2,principal4"))));
 
         Ok(())
     }
@@ -130,7 +151,7 @@ mod test {
         cert_builder.valid_principal("principal")?;
         let cert = cert_builder.sign(&ca_key)?;
 
-        assert!(!validate_cert(&cert, st(1752577200), "principal"));
+        assert!(!validate_cert(&cert, st(1752577200), "principal", &CertData::new(cert.signature_key().clone(), PrincipalsList::from(""))));
 
         Ok(())
     }
@@ -139,7 +160,7 @@ mod test {
     fn test_unknown_critical_field_in_cert() -> Result<()> {
         let cert = Certificate::from_openssh(include_str!(data!("cert_unknown_critical.pub")))?;
         // within validity: 1999-08-15 12:00:00
-        assert!(!validate_cert(&cert, st(934714800), "user"));
+        assert!(!validate_cert(&cert, st(934714800), "user", &CertData::new(cert.signature_key().clone(), PrincipalsList::from(""))));
         Ok(())
     }
 

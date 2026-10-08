@@ -12,6 +12,7 @@ mod pamext;
 #[cfg(test)]
 mod test;
 mod verify;
+mod certificate;
 
 pub use crate::agent::SSHAgent;
 pub use crate::auth::authenticate;
@@ -143,7 +144,7 @@ fn check_sshd_special_case(
         &PublicKey::from_openssh(&key)
             .context("failed to parse key in SSH_AUTH_INFO_0 environment variable")?
             .into(),
-    ))
+    ).is_ok())
 }
 
 fn get_path(args: &Args) -> Result<String> {
