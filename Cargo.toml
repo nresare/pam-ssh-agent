@@ -22,8 +22,7 @@ ssh-key = { version = "0.6", features = ["crypto"] }
 signature = "2.2"
 anyhow = "1.0"
 pam-bindings = "0.3"
-# Keep this on 6.x until https://bugzilla.redhat.com/show_bug.cgi?id=2300127 is resolved
-syslog = "6.1"
+syslog = "7"
 uzers = { version = "0.12", default-features = false }
 hostname = { version = "0.4", default-features = false }
 log = "0.4"
@@ -35,7 +34,7 @@ p384 = { version = "0.13", optional = true }
 p521 = { version = "0.13", optional = true }
 
 [dev-dependencies]
-base64 = "0.22"
+base64 = "0.23"
 # this version needs to match the version brought in by ssh-key
 ssh-encoding = "0.2"
 env_logger = "0.11"
