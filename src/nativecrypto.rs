@@ -43,6 +43,7 @@ fn get_key_and_digest(
     key_data: &KeyData,
     signature: &Signature,
 ) -> anyhow::Result<(PKey<Public>, Option<MessageDigest>)> {
+    let key_data = unwrap_sk_keys(key_data);
     match key_data {
         KeyData::Ecdsa(public_key) => {
             let (group, digest) = match public_key {
@@ -87,6 +88,14 @@ fn get_key_and_digest(
             "Key type is not supported: {:?}",
             key_data.algorithm()
         )),
+    }
+}
+
+fn unwrap_sk_keys(key_data: &KeyData) -> KeyData {
+    match key_data {
+        KeyData::SkEcdsaSha2NistP256(key) => KeyData::Ecdsa(NistP256(key.ec_point().clone())),
+        KeyData::SkEd25519(key) => KeyData::Ed25519(key.public_key().clone()),
+        _ => key_data.clone(),
     }
 }
 
