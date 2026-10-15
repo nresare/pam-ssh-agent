@@ -1,6 +1,7 @@
 mod agent;
 mod args;
 mod auth;
+mod certificate;
 mod cmd;
 mod environment;
 mod expansions;
@@ -111,7 +112,12 @@ fn do_authenticate(args: &Args, handle: &PamHandle) -> Result<()> {
         &calling_user,
     )?;
 
-    if check_sshd_special_case(handle.get_service().ok(), &filter, UnixEnvironment)? {
+    if check_sshd_special_case(
+        handle.get_service().ok(),
+        &filter,
+        &calling_user,
+        UnixEnvironment,
+    )? {
         return Ok(());
     }
     match authenticate(&filter, ssh_agent_client, &handle.get_calling_user()?)? {
@@ -125,6 +131,7 @@ fn do_authenticate(args: &Args, handle: &PamHandle) -> Result<()> {
 fn check_sshd_special_case(
     service: Option<String>,
     filter: &IdentityFilter,
+    username: &str,
     env: impl Environment,
 ) -> Result<bool> {
     match service {
@@ -143,6 +150,7 @@ fn check_sshd_special_case(
         &PublicKey::from_openssh(&key)
             .context("failed to parse key in SSH_AUTH_INFO_0 environment variable")?
             .into(),
+        username,
     ))
 }
 
@@ -180,6 +188,7 @@ mod tests {
         assert!(check_sshd_special_case(
             Some("sshd".to_string()),
             &filter,
+            "user",
             CannedEnv::new(vec![include_str!(data!("id_ed25519.pub"))])
         )?);
 
@@ -187,16 +196,18 @@ mod tests {
         assert!(!check_sshd_special_case(
             Some("sshd".to_string()),
             &filter,
+            "user",
             CannedEnv::new(vec![include_str!(data!("ca_key.pub"))])
         )?);
 
         // if service is not set, return false
-        assert!(!check_sshd_special_case(None, &filter, DummyEnv)?);
+        assert!(!check_sshd_special_case(None, &filter, "user", DummyEnv)?);
 
         // if service is not set to something other than sshd, return false
         assert!(!check_sshd_special_case(
             Some("something".to_string()),
             &filter,
+            "user",
             DummyEnv
         )?);
 
@@ -205,6 +216,7 @@ mod tests {
             check_sshd_special_case(
                 Some("sshd".to_string()),
                 &filter,
+                "user",
                 CannedEnv::new(vec!["invalid"])
             )
             .is_err()

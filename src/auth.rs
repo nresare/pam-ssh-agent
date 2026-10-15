@@ -19,12 +19,12 @@ const CHALLENGE_SIZE: usize = 32;
 pub fn authenticate(
     filter: &IdentityFilter,
     mut agent: impl SSHAgent,
-    principal: &str,
+    username: &str,
 ) -> Result<bool> {
     for identity in agent.list_identities()? {
-        if filter.filter(&identity) {
+        if filter.filter(&identity, username) {
             if let Certificate(cert) = &identity
-                && !validate_cert(cert, SystemTime::now(), principal)
+                && !check_cert_time_validity(cert, SystemTime::now())
             {
                 info!("Cert not valid, skipping");
                 continue;
@@ -58,7 +58,7 @@ fn sign_and_verify(identity: Identity<'static>, agent: &mut impl SSHAgent) -> Re
     Ok(true)
 }
 
-fn validate_cert(cert: &ssh_key::Certificate, when: SystemTime, principal: &str) -> bool {
+fn check_cert_time_validity(cert: &ssh_key::Certificate, when: SystemTime) -> bool {
     let ca_key = cert.signature_key();
 
     if let Err(e) = cert.validate_at(
@@ -70,76 +70,98 @@ fn validate_cert(cert: &ssh_key::Certificate, when: SystemTime, principal: &str)
         info!("Certificate validation failed: {e:?}");
         return false;
     }
-
-    if !cert.cert_type().is_user() {
-        info!("Cert type is not user, are you trying to authenticate with a host cert?");
-        return false;
-    }
-
-    if !cert.valid_principals().iter().any(|p| p == principal) {
-        info!("Cert matches but '{principal}' is not in the list of valid principals.");
-        return false;
-    }
-
-    if !cert.critical_options().is_empty() {
-        info!("Cert has critical options we don't know how to handle");
-        return false;
-    }
-
     true
 }
 
 #[cfg(test)]
 mod test {
-    use crate::auth::validate_cert;
+    use crate::SSHAgent;
+    use crate::auth::{authenticate, check_cert_time_validity};
+    use crate::filter::IdentityFilter;
     use crate::test::{CERT_STR, data};
     use anyhow::Result;
-    use ssh_key::{Certificate, PrivateKey, certificate};
-    use std::time::{Duration, SystemTime};
+    use signature::Signer;
+    use ssh_agent_client_rs::Identity;
+    use ssh_key::{Certificate, PrivateKey, Signature, certificate};
+    use std::path::Path;
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+    /// An agent holding cert_key, presenting the given identities for it
+    struct CertAgent {
+        key: PrivateKey,
+        identities: Vec<Identity<'static>>,
+    }
+
+    impl CertAgent {
+        fn new(identities: Vec<Identity<'static>>) -> Result<Self> {
+            let key = PrivateKey::from_openssh(include_str!(data!("cert_key")))?;
+            Ok(Self { key, identities })
+        }
+    }
+
+    impl SSHAgent for CertAgent {
+        fn list_identities(&mut self) -> ssh_agent_client_rs::Result<Vec<Identity<'static>>> {
+            Ok(self.identities.clone())
+        }
+
+        fn sign<'a>(
+            &mut self,
+            _key: impl Into<Identity<'a>>,
+            data: &[u8],
+        ) -> ssh_agent_client_rs::Result<Signature> {
+            Ok(self.key.key_data().sign(data))
+        }
+    }
+
+    /// A user cert for cert_key with principal "principal", signed by ca_key and valid for an
+    /// hour around now
+    fn current_cert() -> Result<Identity<'static>> {
+        let cert_key = PrivateKey::from_openssh(include_str!(data!("cert_key")))?;
+        let ca_key = PrivateKey::from_openssh(include_str!(data!("ca_key")))?;
+        let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+        let mut cert_builder =
+            certificate::Builder::new(vec![42; 16], cert_key.public_key(), now - 3600, now + 3600)?;
+        cert_builder.valid_principal("principal")?;
+        Ok(cert_builder.sign(&ca_key)?.into())
+    }
 
     #[test]
-    fn test_validate_cert() -> Result<()> {
+    fn test_authenticate_with_cert() -> Result<()> {
+        let filter = IdentityFilter::from_authorized_file(Path::new(data!("authorized_keys")))?;
+        let expired: Identity = Certificate::from_openssh(CERT_STR)?.into();
+
+        // the expired cert is skipped and the current one is used
+        let agent = CertAgent::new(vec![expired.clone(), current_cert()?])?;
+        assert!(authenticate(&filter, agent, "principal")?);
+
+        // only an expired cert: no usable identity
+        let agent = CertAgent::new(vec![expired])?;
+        assert!(!authenticate(&filter, agent, "principal")?);
+
+        // the current cert, but for a user that is not one of its principals
+        let agent = CertAgent::new(vec![current_cert()?])?;
+        assert!(!authenticate(&filter, agent, "another")?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_check_cert_time_validity() -> Result<()> {
         let cert = Certificate::from_openssh(CERT_STR)?;
         // within validity: 2025-07-15 12:00:00
-        assert!(validate_cert(&cert, st(1752577200), "principal"));
-        // wrong principal
-        assert!(!validate_cert(&cert, st(1752577200), "another"));
+        assert!(check_cert_time_validity(&cert, st(1752577200)));
         // too early: 2025-06-15 12:00:00
-        assert!(!validate_cert(&cert, st(1749985200), "principal"));
+        assert!(!check_cert_time_validity(&cert, st(1749985200)));
         // too late: 2025-08-15 12:00:00
-        assert!(!validate_cert(&cert, st(1755255600), "principal"));
+        assert!(!check_cert_time_validity(&cert, st(1755255600)));
 
         // let's change a byte and check if the signature verification fails
         let mut bytes = CERT_STR.as_bytes().to_vec();
         bytes[90] = 0x42;
         let cert = Certificate::from_openssh(&String::from_utf8_lossy(bytes.as_slice()))?;
         // within validity: 2025-07-15 12:00:00 but the data is scrambled
-        assert!(!validate_cert(&cert, st(1752577200), "principal"));
+        assert!(!check_cert_time_validity(&cert, st(1752577200)));
 
-        Ok(())
-    }
-
-    #[test]
-    fn test_validate_cert_rejects_host_cert() -> Result<()> {
-        let cert_key = PrivateKey::from_openssh(include_str!(data!("cert_key")))?;
-        let ca_key = PrivateKey::from_openssh(include_str!(data!("ca_key")))?;
-
-        let mut cert_builder =
-            certificate::Builder::new(vec![42; 16], cert_key.public_key(), 1749985200, 1755255600)?;
-        cert_builder.cert_type(certificate::CertType::Host)?;
-        cert_builder.valid_principal("principal")?;
-        let cert = cert_builder.sign(&ca_key)?;
-
-        assert!(!validate_cert(&cert, st(1752577200), "principal"));
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_unknown_critical_field_in_cert() -> Result<()> {
-        let cert = Certificate::from_openssh(include_str!(data!("cert_unknown_critical.pub")))?;
-        // within validity: 1999-08-15 12:00:00
-        assert!(!validate_cert(&cert, st(934714800), "user"));
         Ok(())
     }
 
