@@ -21,6 +21,7 @@ mod tests {
     use base64::Engine;
     use base64::prelude::BASE64_STANDARD;
     use ssh_encoding::Decode;
+    use ssh_key::public::{KeyData, SkEcdsaSha2NistP256, SkEd25519};
     use ssh_key::{PublicKey, Signature};
 
     #[test]
@@ -138,4 +139,103 @@ mod tests {
 
         Ok(())
     }
+
+    const MESSAGE: &[u8] = b"challenge";
+
+    fn fixture(public: &str, signature: &str) -> (KeyData, Signature) {
+        let key = PublicKey::from_openssh(public).unwrap();
+        let wire = BASE64_STANDARD.decode(signature.trim()).unwrap();
+        let signature = Signature::try_from(wire.as_slice()).unwrap();
+        (key.key_data().clone(), signature)
+    }
+
+    fn with_application(key: &KeyData, application: &str) -> KeyData {
+        match key {
+            KeyData::SkEcdsaSha2NistP256(key) => {
+                KeyData::SkEcdsaSha2NistP256(SkEcdsaSha2NistP256::new(*key.ec_point(), application))
+            }
+            KeyData::SkEd25519(key) => {
+                KeyData::SkEd25519(SkEd25519::new(*key.public_key(), application))
+            }
+            _ => panic!("expected an SK key"),
+        }
+    }
+
+    macro_rules! sk_tests {
+        ($name:ident, $kind:literal) => {
+            mod $name {
+                use super::*;
+
+                fn load(application: &str) -> (KeyData, Signature) {
+                    match application {
+                        "default" => fixture(
+                            include_str!(concat!("../tests/data/sk/", $kind, "_default.pub")),
+                            include_str!(concat!("../tests/data/sk/", $kind, "_default.sig")),
+                        ),
+                        "custom" => fixture(
+                            include_str!(concat!("../tests/data/sk/", $kind, "_custom.pub")),
+                            include_str!(concat!("../tests/data/sk/", $kind, "_custom.sig")),
+                        ),
+                        _ => unreachable!(),
+                    }
+                }
+
+                #[test]
+                fn verifies_default_application() {
+                    let (key, signature) = load("default");
+                    verify(&key, MESSAGE, &signature).unwrap();
+                }
+
+                #[test]
+                fn verifies_custom_application() {
+                    let (key, signature) = load("custom");
+                    verify(&key, MESSAGE, &signature).unwrap();
+                }
+
+                #[test]
+                fn rejects_changed_message() {
+                    let (key, signature) = load("custom");
+                    assert!(verify(&key, b"different challenge", &signature).is_err());
+                }
+
+                #[test]
+                fn rejects_changed_application() {
+                    let (key, signature) = load("custom");
+                    let key = with_application(&key, "ssh:");
+                    assert!(verify(&key, MESSAGE, &signature).is_err());
+                }
+
+                fn rejects_changed_byte(offset_from_end: usize) {
+                    let (key, signature) = load("custom");
+                    let mut bytes = signature.as_bytes().to_vec();
+                    let offset = bytes.len() - offset_from_end;
+                    bytes[offset] ^= 1;
+                    // Parsing must succeed: this tests cryptographic rejection, not
+                    // rejection of a malformed SSH signature.
+                    let changed = Signature::new(signature.algorithm(), bytes).unwrap();
+                    assert!(verify(&key, MESSAGE, &changed).is_err());
+                }
+
+                #[test]
+                fn rejects_changed_signature() {
+                    rejects_changed_byte(6);
+                }
+
+                #[test]
+                fn rejects_changed_flags() {
+                    rejects_changed_byte(5);
+                }
+
+                #[test]
+                fn rejects_changed_counter() {
+                    // Change the most significant counter byte to catch endianness
+                    // mistakes as well as implementations that omit the counter.
+                    rejects_changed_byte(4);
+                }
+            }
+        };
+    }
+
+    sk_tests!(sk_ecdsa, "ecdsa");
+    sk_tests!(sk_ed25519, "ed25519");
 }
