@@ -719,7 +719,7 @@ dependencies = [
 
 [[package]]
 name = "pam-ssh-agent"
-version = "0.9.7"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "base64",

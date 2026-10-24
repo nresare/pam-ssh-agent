@@ -1,3 +1,10 @@
+pam-ssh-agent (1.0.0-1~noble) noble; urgency=medium
+
+  * Updated dependencies
+  * Minor fixes
+
+ -- Noa Resare <noa@resare.com>  Sun, 24 Oct 2026 18:26:02 +0000
+
 pam-ssh-agent (0.9.7-1~noble) noble; urgency=medium
 
   * Tighten security by dropping privileges before invoking external command
